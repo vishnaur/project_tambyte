@@ -1,5 +1,3 @@
-'use client';
-
 import React from 'react';
 import { X, Clock, MapPin, Zap, Volume2, ShieldCheck } from 'lucide-react';
 

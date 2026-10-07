@@ -1,14 +1,12 @@
-'use client';
-
 import React, { useState } from 'react';
-import { Navbar } from './components/Navbar';
-import { FilterPanel, FilterState } from './components/FilterPanel';
-import { MapArea } from './components/MapArea';
-import { SpotDetailPanel, SpotData } from './components/SpotDetailPanel';
-import { Footer } from './components/Footer';
-import { X, ShieldAlert, AlertCircle, Info } from 'lucide-react';
+import { Navbar } from '../components/Navbar';
+import { FilterPanel, FilterState } from '../components/FilterPanel';
+import { MapArea } from '../components/MapArea';
+import { SpotDetailPanel, SpotData } from '../components/SpotDetailPanel';
+import { Footer } from '../components/Footer';
+import { X, ShieldAlert, AlertCircle } from 'lucide-react';
 
-export default function Page() {
+export default function HomePage() {
   // Mobile filter drawer visibility state
   const [isMobileFilterOpen, setIsMobileFilterOpen] = useState(false);
 

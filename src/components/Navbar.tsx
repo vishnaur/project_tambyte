@@ -1,5 +1,3 @@
-'use client';
-
 import React from 'react';
 import { Compass, User, SlidersHorizontal, X } from 'lucide-react';
 
