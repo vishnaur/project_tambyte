@@ -1,101 +1,167 @@
-import React from 'react';
-import { MapPin, ZoomIn, ZoomOut, Layers } from 'lucide-react';
+import L from 'leaflet';
+import { MapContainer, Marker, Popup, TileLayer } from 'react-leaflet';
+import { BULSU_MENESES_CAMPUS } from '../constants/locations';
+import type { SpotRow } from '../types/database';
 
 interface MapAreaProps {
-  onSelectSampleSpot: () => void;
   selectedSpotId: string | null;
+  locations: readonly SpotRow[];
+  totalLocationCount: number;
+  invalidCoordinateCount: number;
+  isLoading: boolean;
+  loadError: string | null;
+  onSelectLocation: (location: SpotRow) => void;
+  onRetry: () => void;
 }
 
-export function MapArea({ onSelectSampleSpot, selectedSpotId }: MapAreaProps) {
+const BULSU_MENESES_COORDINATES: L.LatLngExpression = [
+  BULSU_MENESES_CAMPUS.latitude,
+  BULSU_MENESES_CAMPUS.longitude,
+];
+
+const campusIcon = L.divIcon({
+  className: 'tambyte-campus-marker',
+  html: '<span aria-hidden="true"></span>',
+  iconSize: [24, 24],
+  iconAnchor: [12, 12],
+});
+
+function createSpotIcon(isSelected: boolean) {
+  return L.divIcon({
+    className: `tambyte-spot-marker${isSelected ? ' tambyte-spot-marker-selected' : ''}`,
+    html: '<span aria-hidden="true"></span>',
+    iconSize: [20, 20],
+    iconAnchor: [10, 10],
+  });
+}
+
+function hasValidCoordinates(location: SpotRow) {
+  return (
+    Number.isFinite(location.latitude) &&
+    Number.isFinite(location.longitude) &&
+    location.latitude >= -90 &&
+    location.latitude <= 90 &&
+    location.longitude >= -180 &&
+    location.longitude <= 180
+  );
+}
+
+export function MapArea({
+  selectedSpotId,
+  locations,
+  totalLocationCount,
+  invalidCoordinateCount,
+  isLoading,
+  loadError,
+  onSelectLocation,
+  onRetry,
+}: MapAreaProps) {
+  const validLocations = locations.filter(hasValidCoordinates);
+
   return (
     <main
-      className="relative flex-1 bg-slate-100/80 p-4 sm:p-6 lg:p-8 overflow-hidden flex flex-col"
-      aria-label="Campus Interactive Map Viewport"
+      className="relative flex min-h-0 flex-1 flex-col gap-3 overflow-hidden bg-slate-100/80 p-3 sm:p-5 lg:p-6"
+      aria-label="Interactive place map"
     >
-      {/* 
-        MAIN MAP CONTAINER 
-        PHASE 2 NOTE: Hand-drawn SVG campus map will replace the placeholder contents here.
-        SVG layers will include campus paths, building outlines, tree canopies, 
-        and interactive <g> hotspot nodes dynamically loaded from Supabase.
-      */}
-      <div className="relative flex flex-1 flex-col items-center justify-center rounded-2xl border-2 border-dashed border-slate-300 bg-slate-100 p-6 text-center transition-colors shadow-inner">
-        {/* Subtle architectural grid pattern to represent the canvas space */}
-        <div
-          className="pointer-events-none absolute inset-0 rounded-2xl opacity-40"
-          style={{
-            backgroundImage:
-              'radial-gradient(circle at 1px 1px, #94a3b8 1px, transparent 0)',
-            backgroundSize: '24px 24px',
-          }}
-          aria-hidden="true"
-        />
+      <div className="relative min-h-[420px] flex-1 overflow-hidden rounded-2xl border border-slate-200 bg-slate-100 shadow-inner sm:min-h-[500px]">
+        <MapContainer
+          center={BULSU_MENESES_COORDINATES}
+          zoom={15}
+          scrollWheelZoom
+          zoomControl
+          className="h-full min-h-[420px] w-full sm:min-h-[500px]"
+          aria-label={`Map centered on ${BULSU_MENESES_CAMPUS.name}`}
+        >
+          <TileLayer
+            attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+            url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+          />
 
-        {/* Floating placeholder map controls for Phase 2 visual indication */}
-        <div className="absolute top-4 right-4 z-10 flex flex-col gap-1.5 rounded-xl border border-slate-200 bg-white/90 p-1.5 shadow-sm backdrop-blur-sm">
-          <button
-            type="button"
-            className="flex h-9 w-9 items-center justify-center rounded-lg text-slate-600 hover:bg-slate-100 hover:text-slate-900 transition-colors"
-            title="Zoom In (Phase 2)"
-            aria-label="Zoom In (Phase 2)"
-          >
-            <ZoomIn className="h-4 w-4" aria-hidden="true" />
-          </button>
-          <button
-            type="button"
-            className="flex h-9 w-9 items-center justify-center rounded-lg text-slate-600 hover:bg-slate-100 hover:text-slate-900 transition-colors"
-            title="Zoom Out (Phase 2)"
-            aria-label="Zoom Out (Phase 2)"
-          >
-            <ZoomOut className="h-4 w-4" aria-hidden="true" />
-          </button>
-          <button
-            type="button"
-            className="flex h-9 w-9 items-center justify-center rounded-lg text-slate-600 hover:bg-slate-100 hover:text-slate-900 transition-colors"
-            title="Toggle Map Layers (Phase 2)"
-            aria-label="Toggle Map Layers (Phase 2)"
-          >
-            <Layers className="h-4 w-4" aria-hidden="true" />
-          </button>
+          <Marker position={BULSU_MENESES_COORDINATES} icon={campusIcon}>
+            <Popup>
+              <strong>{BULSU_MENESES_CAMPUS.name}</strong>
+              <br />
+              Food and shop finder map center
+            </Popup>
+          </Marker>
+
+          {validLocations.map((location) => (
+            <Marker
+              key={location.id}
+              position={[location.latitude, location.longitude]}
+              icon={createSpotIcon(selectedSpotId === location.id)}
+              eventHandlers={{
+                click: () => onSelectLocation(location),
+              }}
+            >
+              <Popup>
+                <strong>{location.name}</strong>
+                {location.category && (
+                  <>
+                    <br />
+                    {location.category}
+                  </>
+                )}
+                {location.location_description && (
+                  <>
+                    <br />
+                    {location.location_description}
+                  </>
+                )}
+                <br />
+                <button
+                  type="button"
+                  onClick={() => onSelectLocation(location)}
+                  className="mt-1 font-semibold text-emerald-700"
+                >
+                  View details
+                </button>
+              </Popup>
+            </Marker>
+          ))}
+        </MapContainer>
+
+        <div className="absolute bottom-3 left-3 z-[1000] rounded-lg border border-slate-200 bg-white/95 px-3 py-2 text-xs font-medium text-slate-700 shadow-sm backdrop-blur-sm sm:bottom-4 sm:left-4">
+          <span className="inline-block h-2.5 w-2.5 rounded-full bg-emerald-600" aria-hidden="true" />
+          <span className="ml-2">BulSU – Meneses Campus</span>
+          <span className="mx-2 text-slate-300" aria-hidden="true">|</span>
+          <span className="inline-block h-2.5 w-2.5 rounded-full bg-emerald-600" aria-hidden="true" />
+          <span className="ml-2">Food &amp; shops</span>
         </div>
+      </div>
 
-        {/* Center Canvas Placeholder Text */}
-        <div className="relative z-10 max-w-md px-4">
-          <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-white text-emerald-600 shadow-sm border border-slate-200/80">
-            <MapPin className="h-7 w-7" aria-hidden="true" />
-          </div>
-
-          <h1 className="text-xl sm:text-2xl font-semibold tracking-tight text-slate-800">
-            Map goes here
-          </h1>
-
-          <p className="mt-2 text-xs sm:text-sm leading-relaxed text-slate-500">
-            Hand-drawn SVG campus map container (Phase 2). No external tile services
-            or dependencies required.
-          </p>
-
-          {/* 
-            SAMPLE SPOT MARKER BUTTON
-            Demonstrates interaction flow: clicking reveals the Spot Details panel.
-          */}
-          <div className="mt-6 flex flex-col sm:flex-row items-center justify-center gap-3">
+      <div className="rounded-xl border border-slate-200 bg-white px-3 py-2.5 shadow-sm sm:px-4">
+        {loadError ? (
+          <div className="flex flex-wrap items-center justify-between gap-2" role="alert">
+            <p className="text-xs text-rose-700">
+              Unable to load places. {loadError}
+            </p>
             <button
               type="button"
-              onClick={onSelectSampleSpot}
-              className={`flex min-h-[44px] items-center gap-2 rounded-xl px-5 py-2.5 text-xs font-semibold shadow-sm transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-600 focus-visible:ring-offset-2 ${
-                selectedSpotId === 'sample-spot-1'
-                  ? 'bg-emerald-700 text-white ring-2 ring-emerald-600 ring-offset-2'
-                  : 'bg-emerald-600 text-white hover:bg-emerald-700 active:scale-95'
-              }`}
+              onClick={onRetry}
+              className="min-h-9 rounded-lg border border-slate-200 px-3 text-xs font-semibold text-slate-700 hover:bg-slate-50"
             >
-              <MapPin className="h-4 w-4" aria-hidden="true" />
-              <span>Sample Spot: Main Library Steps</span>
+              Retry
             </button>
           </div>
-
-          <p className="mt-3 text-[11px] text-slate-400">
-            Click marker above to test Spot Details panel interaction.
+        ) : isLoading ? (
+          <p className="text-xs text-slate-600" role="status">          Finding places...</p>
+        ) : validLocations.length ? (
+          <p className="text-xs text-slate-600">
+            {validLocations.length} location{validLocations.length === 1 ? '' : 's'} shown on map
+            {invalidCoordinateCount > 0 &&
+              ` · ${invalidCoordinateCount} location${invalidCoordinateCount === 1 ? '' : 's'} excluded because coordinates are missing or invalid`}
           </p>
-        </div>
+        ) : totalLocationCount === 0 ? (
+          <p className="text-xs text-slate-600">No places found.</p>
+        ) : invalidCoordinateCount > 0 ? (
+          <p className="text-xs text-amber-700">
+            No mappable locations. {invalidCoordinateCount} location
+            {invalidCoordinateCount === 1 ? ' is' : 's are'} missing valid coordinates.
+          </p>
+        ) : (
+          <p className="text-xs text-slate-600">No places found in this category.</p>
+        )}
       </div>
     </main>
   );

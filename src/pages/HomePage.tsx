@@ -1,47 +1,121 @@
-import React, { useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Navbar } from '../components/Navbar';
-import { FilterPanel, FilterState } from '../components/FilterPanel';
+import { FilterPanel } from '../components/FilterPanel';
 import { MapArea } from '../components/MapArea';
-import { SpotDetailPanel, SpotData } from '../components/SpotDetailPanel';
+import { SpotDetailPanel } from '../components/SpotDetailPanel';
 import { Footer } from '../components/Footer';
 import { X, ShieldAlert, AlertCircle } from 'lucide-react';
+import { BULSU_MENESES_CAMPUS } from '../constants/locations';
+import { getSupabaseClient } from '../services/supabase';
+import type { SpotRow } from '../types/database';
+import { calculateDistanceKm } from '../utils/location';
 
 export default function HomePage() {
-  // Mobile filter drawer visibility state
   const [isMobileFilterOpen, setIsMobileFilterOpen] = useState(false);
-
-  // Spot detail bottom sheet/panel state
-  const [selectedSpot, setSelectedSpot] = useState<SpotData | null>(null);
+  const [selectedSpot, setSelectedSpot] = useState<SpotRow | null>(null);
   const [isDetailOpen, setIsDetailOpen] = useState(false);
-
-  // Interactive feedback dialogs for placeholder buttons (Admin & Report)
+  const [directionsSpotId, setDirectionsSpotId] = useState<string | null>(null);
+  const [locations, setLocations] = useState<SpotRow[]>([]);
+  const [isLoadingLocations, setIsLoadingLocations] = useState(true);
+  const [locationLoadError, setLocationLoadError] = useState<string | null>(null);
+  const [selectedCategory, setSelectedCategory] = useState('__all__');
+  const [reloadLocations, setReloadLocations] = useState(0);
   const [activeModal, setActiveModal] = useState<'admin' | 'report' | null>(null);
 
-  // Sample spot mock data to prove the SpotDetailPanel interaction works
-  const sampleSpot: SpotData = {
-    id: 'sample-spot-1',
-    name: 'Main Library Veranda',
-    category: 'Quiet Study',
-    hours: '7:00 AM - 9:00 PM',
-    locationDescription: '2nd Floor North Wing, beside the Old Academic Quad',
-    noiseLevel: 'Low (Whisper zone)',
-    outletsAvailable: true,
-  };
+  useEffect(() => {
+    let isCurrentRequest = true;
 
-  const handleSelectSampleSpot = () => {
-    setSelectedSpot(sampleSpot);
+    async function loadLocations() {
+      setIsLoadingLocations(true);
+      setLocationLoadError(null);
+
+      try {
+        const { data, error } = await getSupabaseClient()
+          .from('spots')
+          .select('*')
+          .eq('is_active', true)
+          .order('name', { ascending: true });
+
+        if (error) {
+          throw error;
+        }
+
+        if (isCurrentRequest) {
+          setLocations(data);
+        }
+      } catch (error) {
+        if (isCurrentRequest) {
+          setLocationLoadError(
+            error instanceof Error ? error.message : 'Unable to load locations.',
+          );
+        }
+      } finally {
+        if (isCurrentRequest) {
+          setIsLoadingLocations(false);
+        }
+      }
+    }
+
+    void loadLocations();
+    return () => {
+      isCurrentRequest = false;
+    };
+  }, [reloadLocations]);
+
+  const categories = useMemo(
+    () =>
+      [...new Set(locations.map((location) => location.category).filter((category) => category.trim()))]
+        .sort((first, second) => first.localeCompare(second)),
+    [locations],
+  );
+
+  const categoryLocations = useMemo(
+    () =>
+      locations.filter(
+        (location) =>
+          selectedCategory === '__all__' ||
+          location.category.trim() === selectedCategory.trim(),
+      ),
+    [locations, selectedCategory],
+  );
+
+  const filteredLocations = useMemo(
+    () =>
+      categoryLocations.filter(
+        (location) =>
+          Number.isFinite(location.latitude) &&
+          Number.isFinite(location.longitude) &&
+          location.latitude >= -90 &&
+          location.latitude <= 90 &&
+          location.longitude >= -180 &&
+          location.longitude <= 180,
+      ),
+    [categoryLocations],
+  );
+
+  const handleSelectLocation = (location: SpotRow) => {
+    setSelectedSpot(location);
     setIsDetailOpen(true);
-    // On mobile, close filter drawer if open so user sees spot details
+    setDirectionsSpotId(null);
     setIsMobileFilterOpen(false);
   };
 
   const handleCloseDetail = () => {
     setIsDetailOpen(false);
+    setDirectionsSpotId(null);
   };
 
-  const handleFilterChange = (filters: FilterState) => {
-    // PHASE 2 NOTE: Connect filter state to live Supabase query
-    // Example: supabase.from('spots').select('*').ilike('name', `%${filters.searchQuery}%`)
+  const handleCategoryChange = (category: string) => {
+    setSelectedCategory(category);
+    if (
+      selectedSpot &&
+      category !== '__all__' &&
+      selectedSpot.category.trim() !== category.trim()
+    ) {
+      setSelectedSpot(null);
+      setIsDetailOpen(false);
+      setDirectionsSpotId(null);
+    }
   };
 
   return (
@@ -58,7 +132,10 @@ export default function HomePage() {
         {/* Desktop Left/Side Filter Panel */}
         <FilterPanel
           className="hidden md:flex md:w-80 lg:w-88 shrink-0 overflow-y-auto"
-          onFilterChange={handleFilterChange}
+          id="category-select-desktop"
+          categories={categories}
+          selectedCategory={selectedCategory}
+          onCategoryChange={handleCategoryChange}
         />
 
         {/* Mobile Collapsible Filter Drawer */}
@@ -66,15 +143,23 @@ export default function HomePage() {
           <div className="md:hidden z-20 border-b border-slate-200 bg-white shadow-md animate-in slide-in-from-top-2 duration-200">
             <FilterPanel
               className="w-full border-r-0"
-              onFilterChange={handleFilterChange}
+              id="category-select-mobile"
+              categories={categories}
+              selectedCategory={selectedCategory}
+              onCategoryChange={handleCategoryChange}
             />
           </div>
         )}
 
-        {/* Main Map Viewport Area (Container for Phase 2 hand-drawn SVG map) */}
         <MapArea
-          onSelectSampleSpot={handleSelectSampleSpot}
-          selectedSpotId={isDetailOpen && selectedSpot ? selectedSpot.id : null}
+          locations={filteredLocations}
+          totalLocationCount={locations.length}
+          invalidCoordinateCount={categoryLocations.length - filteredLocations.length}
+          isLoading={isLoadingLocations}
+          loadError={locationLoadError}
+          onRetry={() => setReloadLocations((attempt) => attempt + 1)}
+          onSelectLocation={handleSelectLocation}
+          selectedSpotId={isDetailOpen ? selectedSpot?.id ?? null : null}
         />
 
         {/* 3. Spot Details Bottom Sheet / Side Panel (Hidden by default, proves interaction) */}
@@ -82,6 +167,14 @@ export default function HomePage() {
           isOpen={isDetailOpen}
           onClose={handleCloseDetail}
           spot={selectedSpot}
+          distanceKm={
+            selectedSpot
+              ? calculateDistanceKm(BULSU_MENESES_CAMPUS, selectedSpot)
+              : null
+          }
+          directionsRequested={directionsSpotId === selectedSpot?.id}
+          onGetDirections={() => setDirectionsSpotId(selectedSpot?.id ?? null)}
+          onClearDirections={() => setDirectionsSpotId(null)}
         />
       </div>
 
