@@ -1,0 +1,44 @@
+@import "tailwindcss";
+
+@theme {
+  --color-crimson-deep: #700F12;
+  --color-crimson-dark: #500F12;
+  --color-crimson-scarlet: #8F1518;
+  --color-crimson-wine: #400008;
+}
+
+.tambyte-campus-marker,
+.tambyte-spot-marker {
+  display: grid;
+  place-items: center;
+  border: 2px solid white;
+  border-radius: 9999px;
+  box-shadow: 0 1px 5px rgb(15 23 42 / 35%);
+}
+
+.tambyte-campus-marker {
+  background: #0f172a;
+}
+
+.tambyte-campus-marker span {
+  width: 8px;
+  height: 8px;
+  border: 2px solid white;
+  border-radius: 9999px;
+}
+
+.tambyte-spot-marker {
+  background: #059669;
+}
+
+.tambyte-spot-marker-selected {
+  background: #047857;
+  outline: 3px solid rgb(16 185 129 / 35%);
+}
+
+.tambyte-spot-marker span {
+  width: 6px;
+  height: 6px;
+  border-radius: 9999px;
+  background: white;
+}
