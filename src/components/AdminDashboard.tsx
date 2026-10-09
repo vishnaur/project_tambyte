@@ -164,7 +164,7 @@ export function AdminDashboard({ isOpen, onClose, onSpotsUpdated }: AdminDashboa
             onClick={() => setActiveTab('pending')}
             className={`rounded-lg px-3 py-1.5 transition-all ${
               activeTab === 'pending'
-                ? 'bg-white text-emerald-700 shadow-sm'
+                ? 'bg-white text-dark-burgundy shadow-sm'
                 : 'text-slate-600 hover:text-slate-900'
             }`}
           >
@@ -174,7 +174,7 @@ export function AdminDashboard({ isOpen, onClose, onSpotsUpdated }: AdminDashboa
             onClick={() => setActiveTab('approved')}
             className={`rounded-lg px-3 py-1.5 transition-all ${
               activeTab === 'approved'
-                ? 'bg-white text-emerald-700 shadow-sm'
+                ? 'bg-white text-dark-burgundy shadow-sm'
                 : 'text-slate-600 hover:text-slate-900'
             }`}
           >
@@ -184,7 +184,7 @@ export function AdminDashboard({ isOpen, onClose, onSpotsUpdated }: AdminDashboa
             onClick={() => setActiveTab('add')}
             className={`flex items-center gap-1 rounded-lg px-3 py-1.5 transition-all ${
               activeTab === 'add'
-                ? 'bg-emerald-600 text-white shadow-sm'
+                ? 'bg-dark-burgundy text-white shadow-sm'
                 : 'text-slate-600 hover:text-slate-900'
             }`}
           >
@@ -196,7 +196,7 @@ export function AdminDashboard({ isOpen, onClose, onSpotsUpdated }: AdminDashboa
 
       {/* Action Notification */}
       {actionMessage && (
-        <div className="bg-emerald-600 px-6 py-2 text-center text-xs font-semibold text-white">
+        <div className="bg-dark-burgundy px-6 py-2 text-center text-xs font-semibold text-white">
           {actionMessage}
         </div>
       )}
@@ -214,7 +214,7 @@ export function AdminDashboard({ isOpen, onClose, onSpotsUpdated }: AdminDashboa
 
             {pendingSpots.length === 0 ? (
               <div className="rounded-2xl border border-dashed border-slate-300 p-12 text-center bg-white">
-                <CheckCircle2 className="mx-auto h-8 w-8 text-emerald-600 mb-2" />
+                <CheckCircle2 className="mx-auto h-8 w-8 text-deep-crimson mb-2" />
                 <p className="text-sm font-semibold text-slate-700">All caught up!</p>
                 <p className="text-xs text-slate-500">No pending student contributions to review.</p>
               </div>
@@ -254,7 +254,7 @@ export function AdminDashboard({ isOpen, onClose, onSpotsUpdated }: AdminDashboa
                     </button>
                     <button
                       onClick={() => handleApprove(spot.id)}
-                      className="flex items-center gap-1 rounded-xl bg-emerald-600 px-4 py-2 text-xs font-semibold text-white hover:bg-emerald-700 shadow-sm"
+                      className="flex items-center gap-1 rounded-xl bg-dark-burgundy px-4 py-2 text-xs font-semibold text-white hover:bg-deep-maroon shadow-sm"
                     >
                       <CheckCircle2 className="h-3.5 w-3.5" />
                       Approve & Publish
@@ -342,7 +342,7 @@ export function AdminDashboard({ isOpen, onClose, onSpotsUpdated }: AdminDashboa
                 <label className="block text-xs font-semibold text-slate-700">
                   Select Location on Map (Click anywhere to set pin)
                 </label>
-                <span className="text-[11px] font-medium text-emerald-700">
+                <span className="text-[11px] font-medium text-dark-burgundy">
                   {formData.latitude.toFixed(5)}, {formData.longitude.toFixed(5)}
                 </span>
               </div>
@@ -371,7 +371,7 @@ export function AdminDashboard({ isOpen, onClose, onSpotsUpdated }: AdminDashboa
                   type="checkbox"
                   checked={formData.has_outlets}
                   onChange={(e) => setFormData({ ...formData, has_outlets: e.target.checked })}
-                  className="rounded text-emerald-600"
+                  className="rounded text-dark-burgundy accent-dark-burgundy"
                 />
                 Has Outlets
               </label>
@@ -380,7 +380,7 @@ export function AdminDashboard({ isOpen, onClose, onSpotsUpdated }: AdminDashboa
                   type="checkbox"
                   checked={formData.is_shaded}
                   onChange={(e) => setFormData({ ...formData, is_shaded: e.target.checked })}
-                  className="rounded text-emerald-600"
+                  className="rounded text-dark-burgundy accent-dark-burgundy"
                 />
                 Shaded
               </label>
@@ -389,7 +389,7 @@ export function AdminDashboard({ isOpen, onClose, onSpotsUpdated }: AdminDashboa
                   type="checkbox"
                   checked={formData.is_quiet}
                   onChange={(e) => setFormData({ ...formData, is_quiet: e.target.checked })}
-                  className="rounded text-emerald-600"
+                  className="rounded text-dark-burgundy accent-dark-burgundy"
                 />
                 Quiet Area
               </label>
@@ -398,7 +398,7 @@ export function AdminDashboard({ isOpen, onClose, onSpotsUpdated }: AdminDashboa
             <button
               type="submit"
               disabled={loading}
-              className="w-full rounded-xl bg-emerald-600 py-2.5 text-xs font-semibold text-white hover:bg-emerald-700 shadow-sm"
+              className="w-full rounded-xl bg-dark-burgundy py-2.5 text-xs font-semibold text-white hover:bg-deep-maroon shadow-sm"
             >
               Save and Publish to Live Map
             </button>

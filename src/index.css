@@ -1,17 +1,46 @@
 @import "tailwindcss";
 
 @theme {
-  --color-crimson-deep: #700F12;
-  --color-crimson-dark: #500F12;
-  --color-crimson-scarlet: #8F1518;
-  --color-crimson-wine: #400008;
+  --color-deep-crimson: #970023;
+  --color-dark-burgundy: #460B12;
+  --color-deep-maroon: #27070D;
+  --color-gold: #E68D07;
+  --color-warm-cream: #F9F2E3;
+}
+
+.cat-pattern-background {
+  background-color: #27070d;
+  background-image:
+    linear-gradient(rgb(249 242 227 / 82%), rgb(249 242 227 / 82%)),
+    url('./cat-pattern.png');
+  background-repeat: repeat;
+  background-size: 256px 384px;
+}
+
+.brand-header {
+  border-top: 3px solid #460B12;
+  background-color: #27070d;
+  background-image: linear-gradient(rgb(39 7 13 / 95%), rgb(39 7 13 / 95%)), url('./cat-pattern.png');
+}
+
+.brand-footer {
+  border-top: 3px solid #460B12;
+  background-color: #27070d;
+  background-image: linear-gradient(rgb(39 7 13 / 95%), rgb(39 7 13 / 95%)), url('./cat-pattern.png');
+  background-repeat: repeat;
+  background-size: 256px 384px;
+}
+
+.category-select option:checked {
+  background-color: #e68d07;
+  color: #27070d;
 }
 
 .tambyte-campus-marker,
 .tambyte-spot-marker {
   display: grid;
   place-items: center;
-  border: 2px solid white;
+  border: 2px solid rgb(255, 255, 255);
   border-radius: 9999px;
   box-shadow: 0 1px 5px rgb(15 23 42 / 35%);
 }
@@ -28,12 +57,12 @@
 }
 
 .tambyte-spot-marker {
-  background: #059669;
+  background: #460b12;
 }
 
 .tambyte-spot-marker-selected {
-  background: #047857;
-  outline: 3px solid rgb(16 185 129 / 35%);
+  background: #970023;
+  outline: 3px solid rgb(230 141 7 / 50%);
 }
 
 .tambyte-spot-marker span {
