@@ -12,6 +12,7 @@ import { supabase } from '../lib/supabase';
 import type { SpotRow } from '../types/database';
 import { calculateDistanceKm } from '../utils/location';
 import { AdminDashboard } from '../components/AdminDashboard';
+import { ContributeSpotModal } from '../components/ContributeSpotModal';
 
 export default function HomePage() {
   const [isMobileFilterOpen, setIsMobileFilterOpen] = useState(false);
@@ -26,6 +27,7 @@ export default function HomePage() {
   const [selectedCategory, setSelectedCategory] = useState('__all__');
   const [reloadLocations, setReloadLocations] = useState(0);
   const [isAdminDashboardOpen, setIsAdminDashboardOpen] = useState(false);
+  const [isContributeModalOpen, setIsContributeModalOpen] = useState(false);
   
   // Modals & Auth State
   const [activeModal, setActiveModal] = useState<'admin' | 'report' | null>(null);
@@ -166,6 +168,7 @@ export default function HomePage() {
       {/* 1. Top Navigation Bar */}
       <Navbar
         isAdmin={isAdmin}
+        onShareSpotClick={() => setIsContributeModalOpen(true)}
         onAdminLoginClick={() => setActiveModal('admin')}
         onAdminDashboardClick={() => setIsAdminDashboardOpen(true)}
         onAdminLogoutClick={handleAdminLogout}
@@ -213,6 +216,7 @@ export default function HomePage() {
         )}
 
         <MapArea
+          onShareSpotClick={() => setIsContributeModalOpen(true)}
           locations={filteredLocations}
           totalLocationCount={locations.length}
           invalidCoordinateCount={categoryLocations.length - filteredLocations.length}
@@ -270,14 +274,6 @@ export default function HomePage() {
                 <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-warm-cream text-dark-burgundy">
                   <AlertCircle className="h-5 w-5" aria-hidden="true" />
                 </div>
-                <button
-                  type="button"
-                  onClick={() => setActiveModal(null)}
-                  className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
-                  aria-label="Close report notice"
-                >
-                  <X className="h-4 w-4" aria-hidden="true" />
-                </button>
               </div>
               <h3 id="report-issue-title" className="mt-4 text-base font-semibold text-slate-900">
                 Report an Issue
@@ -300,7 +296,16 @@ export default function HomePage() {
         )
       )}
 
-      {/* Put it right here! */}
+      {/* Student Spot Contribution Modal */}
+      <ContributeSpotModal
+        isOpen={isContributeModalOpen}
+        onClose={() => setIsContributeModalOpen(false)}
+        onSubmitted={() => {
+          setIsContributeModalOpen(false);
+          setReloadLocations((prev) => prev + 1);
+        }}
+      />
+
       <AdminDashboard
         isOpen={isAdminDashboardOpen}
         onClose={() => setIsAdminDashboardOpen(false)}

@@ -1,5 +1,5 @@
 import L from 'leaflet';
-import { PanelLeftClose, PanelLeftOpen } from 'lucide-react';
+import { PanelLeftClose, PanelLeftOpen, Plus } from 'lucide-react';
 import { useEffect, useRef } from 'react';
 import { MapContainer, Marker, Popup, TileLayer, ZoomControl, useMap } from 'react-leaflet';
 import { BULSU_MENESES_CAMPUS } from '../constants/locations';
@@ -18,8 +18,8 @@ interface MapAreaProps {
   onRetry: () => void;
   isFilterOpen: boolean;
   onToggleFilter: () => void;
+  onShareSpotClick?: () => void;
 }
-
 function MapResizeHandler() {
   const map = useMap();
 
@@ -111,6 +111,7 @@ export function MapArea({
   onRetry,
   isFilterOpen,
   onToggleFilter,
+  onShareSpotClick,
 }: MapAreaProps) {
   const validLocations = locations.filter(hasValidCoordinates);
   const markerRefs = useRef(new Map<string, L.Marker>());
@@ -208,13 +209,27 @@ export function MapArea({
           ))}
         </MapContainer>
 
-        <div className="absolute bottom-3 left-3 z-[1000] rounded-lg border border-slate-200 bg-white/95 px-3 py-2 text-xs font-medium text-slate-700 shadow-sm backdrop-blur-sm sm:bottom-4 sm:left-4">
+       <div className="absolute bottom-3 left-3 z-[1000] rounded-lg border border-slate-200 bg-white/95 px-3 py-2 text-xs font-medium text-slate-700 shadow-sm backdrop-blur-sm sm:bottom-4 sm:left-4">
           <span className="inline-block h-2.5 w-2.5 rounded-full bg-dark-burgundy" aria-hidden="true" />
           <span className="ml-2">BulSU – Meneses Campus</span>
           <span className="mx-2 text-slate-300" aria-hidden="true">|</span>
           <span className="inline-block h-2.5 w-2.5 rounded-full bg-deep-crimson" aria-hidden="true" />
           <span className="ml-2">Food &amp; shops</span>
         </div>
+
+        {/* Minimalist Floating + Button */}
+        <button
+          type="button"
+          onClick={() => {
+            console.log("Floating + button clicked!");
+            onShareSpotClick?.();
+          }}
+          className="absolute bottom-8 right-3.5 z-[1000] flex h-11 w-11 items-center justify-center rounded-full bg-deep-crimson text-white shadow-lg hover:scale-110 active:scale-95 transition-transform duration-200 border border-white/60 focus:outline-none"
+          title="Share a Spot"
+          aria-label="Share a Spot"
+        >
+          <Plus className="h-5 w-5 stroke-[2.5]" />
+        </button>
       </div>
 
       <div className="rounded-xl border border-slate-200 bg-white px-3 py-2.5 shadow-sm sm:px-4">

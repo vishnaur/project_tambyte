@@ -30,7 +30,7 @@ export function FilterPanel({
 
   return (
     <aside
-      className={`flex flex-col bg-warm-cream p-5 lg:p-6 border-r border-slate-200 ${className}`}
+      className={`flex flex-col h-full min-h-0 bg-warm-cream p-5 lg:p-6 border-r border-slate-200 ${className}`}
       aria-label="Place filters"
     >
       <div className="mb-6">
@@ -71,8 +71,8 @@ export function FilterPanel({
         </div>
       </div>
 
-      <section className="mt-6" aria-labelledby={`${id}-spots-heading`}>
-          <div className="mb-2 flex items-center justify-between gap-2">
+      <section className="mt-6 flex flex-1 min-h-0 flex-col" aria-labelledby={`${id}-spots-heading`}>
+          <div className="mb-2 flex items-center justify-between gap-2 shrink-0">
             <h3
               id={`${id}-spots-heading`}
               className="text-xs font-semibold uppercase tracking-wider text-dark-burgundy"
@@ -85,8 +85,9 @@ export function FilterPanel({
           </div>
 
           {visibleLocations.length ? (
-            <ul className="space-y-2">
-              {visibleLocations.map((location) => {
+            <div className="max-h-[calc(100vh-280px)] overflow-y-auto pr-1">
+              <ul className="space-y-2">
+                {visibleLocations.map((location) => {
                 const hasCoordinates =
                   Number.isFinite(location.latitude) &&
                   Number.isFinite(location.longitude) &&
@@ -126,7 +127,8 @@ export function FilterPanel({
                   </li>
                 );
               })}
-            </ul>
+              </ul>
+            </div>
           ) : (
             <p className="rounded-xl border border-dashed border-slate-300 bg-white/60 p-3 text-xs text-slate-600">
               {hasSelectedCategory

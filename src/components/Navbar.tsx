@@ -1,11 +1,12 @@
 import React from 'react';
-import { Compass, User, LogOut, SlidersHorizontal, X, ShieldCheck } from 'lucide-react';
+import { Compass, User, LogOut, SlidersHorizontal, X, ShieldCheck, Plus } from 'lucide-react';
 
 interface NavbarProps {
   isAdmin?: boolean;
   onAdminLoginClick: () => void;
-  onAdminDashboardClick?: () => void; // Click to open dashboard
+  onAdminDashboardClick?: () => void;
   onAdminLogoutClick?: () => void;
+  onShareSpotClick?: () => void; // New prop for students to contribute
   isFilterOpenOnMobile: boolean;
   onToggleMobileFilters: () => void;
 }
@@ -15,6 +16,7 @@ export function Navbar({
   onAdminLoginClick,
   onAdminDashboardClick,
   onAdminLogoutClick,
+  onShareSpotClick,
   isFilterOpenOnMobile,
   onToggleMobileFilters,
 }: NavbarProps) {
@@ -63,10 +65,10 @@ export function Navbar({
           )}
         </button>
 
+
         {/* When Logged In as Admin vs Visitor */}
         {isAdmin ? (
           <div className="flex items-center gap-2">
-            {/* THIS BUTTON OPENS YOUR ADMIN DASHBOARD */}
             <button
               type="button"
               onClick={onAdminDashboardClick}
@@ -76,7 +78,6 @@ export function Navbar({
               <span>Manage Spots</span>
             </button>
 
-            {/* Logout Button */}
             <button
               type="button"
               onClick={onAdminLogoutClick}
@@ -90,7 +91,7 @@ export function Navbar({
           <button
             type="button"
             onClick={onAdminLoginClick}
-            className="flex min-h-[44px] items-center gap-2 rounded-xl bg-deep-maroon px-4 py-2 text-xs font-semibold text-white shadow-sm transition-all hover:bg-dark-burgundy active:scale-[0.98]"
+            className="flex min-h-[40px] items-center gap-2 rounded-xl bg-deep-maroon px-4 py-2 text-xs font-semibold text-white shadow-sm transition-all hover:bg-dark-burgundy active:scale-[0.98]"
           >
             <User className="h-3.5 w-3.5 text-slate-300" />
             <span className="whitespace-nowrap">Admin Login</span>
