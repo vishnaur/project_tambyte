@@ -1,7 +1,20 @@
 import L from 'leaflet';
-import { PanelLeftClose, PanelLeftOpen, Plus } from 'lucide-react';
-import { useEffect, useRef } from 'react';
-import { MapContainer, Marker, Popup, TileLayer, ZoomControl, useMap } from 'react-leaflet';
+import { PanelLeftClose, PanelLeftOpen, Plus, Navigation } from 'lucide-react';
+
+// Google Maps-style Pulsing Blue "You Are Here" Dot
+const userLocationIcon = L.divIcon({
+  className: 'tambyte-user-location-marker',
+  html: `
+    <div style="position:relative; width:22px; height:22px; display:flex; align-items:center; justify-content:center;">
+      <div style="position:absolute; width:22px; height:22px; border-radius:50%; background:rgba(37,99,235,0.4); animation:ping 1.5s cubic-bezier(0,0,0.2,1) infinite;"></div>
+      <div style="position:relative; width:12px; height:12px; border-radius:50%; background:#2563eb; border:2.5px solid #ffffff; box-shadow:0 2px 5px rgba(0,0,0,0.4);"></div>
+    </div>
+  `,
+  iconSize: [22, 22],
+  iconAnchor: [11, 11],
+});
+import { useEffect, useRef, useState } from 'react';
+import { MapContainer, Marker, Popup, TileLayer, ZoomControl, Circle, useMap } from 'react-leaflet'; 
 import { BULSU_MENESES_CAMPUS } from '../constants/locations';
 import type { SpotRow } from '../types/database';
 
@@ -66,11 +79,21 @@ function FocusSelectedSpot({
   return null;
 }
 
-const BULSU_MENESES_COORDINATES: L.LatLngExpression = [
+const BULSU_MENESES_COORDINATES: [number, number] = [
   BULSU_MENESES_CAMPUS.latitude,
   BULSU_MENESES_CAMPUS.longitude,
 ];
 
+// 1.2 km (1,200m) Realistic Walking Tambay Zone
+const CAMPUS_RADIUS_METERS = 1200;
+
+// Snug boundary matching the 1.2km zone
+const CAMPUS_VICINITY_BOUNDS: L.LatLngBoundsExpression = [
+  [BULSU_MENESES_CAMPUS.latitude - 0.012, BULSU_MENESES_CAMPUS.longitude - 0.013], // Southwest
+  [BULSU_MENESES_CAMPUS.latitude + 0.012, BULSU_MENESES_CAMPUS.longitude + 0.013], // Northeast
+];
+
+// Put this right here! (Restoring the missing campusIcon)
 const campusIcon = L.divIcon({
   className: 'tambyte-campus-marker',
   html: '<span aria-hidden="true"></span>',
@@ -115,6 +138,36 @@ export function MapArea({
 }: MapAreaProps) {
   const validLocations = locations.filter(hasValidCoordinates);
   const markerRefs = useRef(new Map<string, L.Marker>());
+  const [userLocation, setUserLocation] = useState<[number, number] | null>(null);
+  const mapRef = useRef<L.Map | null>(null);
+
+  // Flies camera to current user location when button is tapped
+  const handleLocateMe = () => {
+    if (userLocation && mapRef.current) {
+      mapRef.current.flyTo(userLocation, 17, { animate: true, duration: 0.8 });
+    } else if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition((pos) => {
+        const coords: [number, number] = [pos.coords.latitude, pos.coords.longitude];
+        setUserLocation(coords);
+        mapRef.current?.flyTo(coords, 17, { animate: true, duration: 0.8 });
+      });
+    }
+  };
+
+  // Real-time GPS position watcher (Client-side only)
+  useEffect(() => {
+    if (!navigator.geolocation) return;
+
+    const watchId = navigator.geolocation.watchPosition(
+      (pos) => {
+        setUserLocation([pos.coords.latitude, pos.coords.longitude]);
+      },
+      (err) => console.log('Location watch notice:', err.message),
+      { enableHighAccuracy: true, maximumAge: 5000, timeout: 10000 }
+    );
+
+    return () => navigator.geolocation.clearWatch(watchId);
+  }, []);
 
   return (
     <main
@@ -137,10 +190,16 @@ export function MapArea({
         )}
       </button>
 
+      {/* Full-Bleed Map Container (Fills the entire screen) */}
       <div className="relative isolate min-h-[420px] flex-1 overflow-hidden rounded-2xl border border-slate-200 bg-slate-100 shadow-inner sm:min-h-[500px]">
         <MapContainer
+          ref={mapRef}
           center={BULSU_MENESES_COORDINATES}
-          zoom={15}
+          zoom={16} // Snaps directly to street/campus view on load
+          minZoom={16} // Zooming out shows the clean 1.2km circle
+          maxZoom={18} // Street-level detail
+          maxBounds={CAMPUS_VICINITY_BOUNDS}
+          maxBoundsViscosity={0.8}
           scrollWheelZoom
           zoomControl={false}
           className="h-full min-h-[420px] w-full sm:min-h-[500px]"
@@ -156,7 +215,20 @@ export function MapArea({
           <TileLayer
             attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
             url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+            maxNativeZoom={18}
+            maxZoom={18}
           />
+
+          {/* Real-time "You Are Here" Pointer */}
+          {userLocation && (
+            <Marker position={userLocation} icon={userLocationIcon}>
+              <Popup>
+                <strong>You are here</strong>
+                <br />
+                <span className="text-xs text-slate-500">Your live GPS location</span>
+              </Popup>
+            </Marker>
+          )}
 
           <Marker position={BULSU_MENESES_COORDINATES} icon={campusIcon}>
             <Popup>
@@ -209,7 +281,8 @@ export function MapArea({
           ))}
         </MapContainer>
 
-       <div className="absolute bottom-3 left-3 z-[1000] rounded-lg border border-slate-200 bg-white/95 px-3 py-2 text-xs font-medium text-slate-700 shadow-sm backdrop-blur-sm sm:bottom-4 sm:left-4">
+       {/* Campus Legend (Bottom-Left) */}
+        <div className="absolute bottom-3 left-3 z-[1000] rounded-lg border border-slate-200 bg-white/95 px-3 py-2 text-xs font-medium text-slate-700 shadow-sm backdrop-blur-sm sm:bottom-4 sm:left-4">
           <span className="inline-block h-2.5 w-2.5 rounded-full bg-dark-burgundy" aria-hidden="true" />
           <span className="ml-2">BulSU – Meneses Campus</span>
           <span className="mx-2 text-slate-300" aria-hidden="true">|</span>
@@ -217,19 +290,41 @@ export function MapArea({
           <span className="ml-2">Food &amp; shops</span>
         </div>
 
-        {/* Minimalist Floating + Button */}
-        <button
-          type="button"
-          onClick={() => {
-            console.log("Floating + button clicked!");
-            onShareSpotClick?.();
-          }}
-          className="absolute bottom-8 right-3.5 z-[1000] flex h-11 w-11 items-center justify-center rounded-full bg-deep-crimson text-white shadow-lg hover:scale-110 active:scale-95 transition-transform duration-200 border border-white/60 focus:outline-none"
-          title="Share a Spot"
-          aria-label="Share a Spot"
-        >
-          <Plus className="h-5 w-5 stroke-[2.5]" />
-        </button>
+        {/* Floating Action Buttons Stack (Bottom-Right) */}
+        <div className="absolute bottom-8 right-3.5 z-[1000] flex flex-col items-center gap-2.5">
+          {/* Locate Me Button */}
+          <button
+            type="button"
+            onClick={handleLocateMe}
+            className="flex h-10 w-10 items-center justify-center rounded-full bg-white text-blue-600 shadow-md hover:scale-110 active:scale-95 transition-all border border-slate-200 focus:outline-none"
+            title="Locate Me"
+            aria-label="Locate Me"
+          >
+            <Navigation className="h-4 w-4 fill-blue-600 text-blue-600 -rotate-45" />
+          </button>
+
+          {/* Share Spot Button */}
+          <button
+            type="button"
+            onClick={() => {
+              console.log("Floating + button clicked!");
+              onShareSpotClick?.();
+            }}
+            className="flex h-11 w-11 items-center justify-center rounded-full bg-deep-crimson text-white shadow-lg hover:scale-110 active:scale-95 transition-all border border-white/60 focus:outline-none"
+            title="Share a Spot"
+            aria-label="Share a Spot"
+          >
+            <Plus className="h-5 w-5 stroke-[2.5]" />
+          </button>
+        </div>
+
+        {/* Sleek Professional Campus Zone Badge (Top Center) */}
+        <div className="absolute top-3 left-1/2 -translate-x-1/2 z-[1000] pointer-events-none">
+          <div className="flex items-center gap-2 rounded-full border border-slate-200/80 bg-white/90 px-3.5 py-1.5 text-xs font-semibold text-slate-800 shadow-md backdrop-blur-md">
+            <span className="h-2 w-2 rounded-full bg-deep-crimson animate-pulse" />
+            <span>BulSU Meneses Vicinity</span>
+          </div>
+        </div>
       </div>
 
       <div className="rounded-xl border border-slate-200 bg-white px-3 py-2.5 shadow-sm sm:px-4">
