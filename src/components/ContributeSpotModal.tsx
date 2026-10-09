@@ -1,6 +1,16 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
-import { MapPin, Navigation, X, CheckCircle } from 'lucide-react';
+import { MapPin, Navigation, X, CheckCircle, Map as MapIcon } from 'lucide-react';
+import { MapContainer, TileLayer, Marker, useMapEvents } from 'react-leaflet';
+
+function LocationPicker({ coords, onPick }: { coords: [number, number]; onPick: (lat: number, lng: number) => void }) {
+  useMapEvents({
+    click(e) {
+      onPick(e.latlng.lat, e.latlng.lng);
+    },
+  });
+  return <Marker position={coords} />;
+}
 
 interface ContributeSpotModalProps {
   isOpen: boolean;
@@ -22,10 +32,14 @@ export function ContributeSpotModal({ isOpen, onClose, onSubmitted }: Contribute
   const [hasOutlets, setHasOutlets] = useState(false);
   const [isShaded, setIsShaded] = useState(false);
   const [isQuiet, setIsQuiet] = useState(false);
+  const [hasWifi, setHasWifi] = useState(false);
+  const [hasAircon, setHasAircon] = useState(false);
+  const [hasRestroom, setHasRestroom] = useState(false);
 
   // Client-side GPS detection
   const [latitude, setLatitude] = useState<number | null>(null);
   const [longitude, setLongitude] = useState<number | null>(null);
+  const [locationMode, setLocationMode] = useState<'gps' | 'map'>('gps');
   const [isDetectingLocation, setIsDetectingLocation] = useState(false);
   const [locationStatus, setLocationStatus] = useState<string>('Detecting location...');
 
@@ -79,6 +93,19 @@ export function ContributeSpotModal({ isOpen, onClose, onSubmitted }: Contribute
     setIsSubmitting(true);
 
     try {
+      // Check if a spot with this name already exists (case-insensitive)
+      const { data: existingSpot } = await supabase
+        .from('spots')
+        .select('id, name')
+        .ilike('name', name.trim())
+        .maybeSingle();
+
+      if (existingSpot) {
+        alert(`A spot named "${name}" is already registered on the map! Please check existing spots.`);
+        setIsSubmitting(false);
+        return;
+      }
+
       // Submits to Supabase with approved = false (Visitor submission)
       const { error } = await supabase.from('spots').insert([
         {
@@ -95,7 +122,10 @@ export function ContributeSpotModal({ isOpen, onClose, onSubmitted }: Contribute
           has_outlets: hasOutlets,
           is_shaded: isShaded,
           is_quiet: isQuiet,
-          approved: false, // Enforced by RLS security policy
+          has_wifi: hasWifi,
+          has_aircon: hasAircon,
+          has_restroom: hasRestroom,
+          approved: false,
         },
       ]);
 
@@ -146,27 +176,84 @@ export function ContributeSpotModal({ isOpen, onClose, onSubmitted }: Contribute
           </div>
         ) : (
           <form onSubmit={handleSubmit} className="mt-4 space-y-3.5">
-            {/* GPS Location Status Box */}
-            <div className="rounded-xl border border-gold/40 bg-gold/15 p-3">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-semibold text-deep-maroon flex items-center gap-1.5">
-                  <Navigation className="h-3.5 w-3.5 text-deep-crimson" />
-                  Current Location (Client-side)
-                </span>
+            {/* Location Mode Selector (GPS vs Pick on Map) */}
+            <div className="space-y-2">
+              <div className="flex rounded-xl bg-slate-100 p-1 text-xs font-semibold">
                 <button
                   type="button"
-                  onClick={detectCurrentLocation}
-                  className="text-[11px] font-semibold text-deep-crimson underline hover:opacity-80"
+                  onClick={() => {
+                    setLocationMode('gps');
+                    detectCurrentLocation();
+                  }}
+                  className={`flex flex-1 items-center justify-center gap-1.5 rounded-lg py-1.5 transition-all ${
+                    locationMode === 'gps'
+                      ? 'bg-white text-deep-maroon shadow-sm'
+                      : 'text-slate-600 hover:text-slate-900'
+                  }`}
                 >
-                  {isDetectingLocation ? 'Reading...' : 'Refresh GPS'}
+                  <Navigation className="h-3.5 w-3.5 text-deep-crimson" />
+                  <span>Use My GPS</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setLocationMode('map')}
+                  className={`flex flex-1 items-center justify-center gap-1.5 rounded-lg py-1.5 transition-all ${
+                    locationMode === 'map'
+                      ? 'bg-white text-deep-maroon shadow-sm'
+                      : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                >
+                  <MapIcon className="h-3.5 w-3.5 text-deep-crimson" />
+                  <span>Pick on Map</span>
                 </button>
               </div>
-              <p className="mt-1 text-[11px] text-slate-600">
-                {latitude && longitude
-                  ? `Lat: ${latitude.toFixed(5)}, Lon: ${longitude.toFixed(5)}`
-                  : locationStatus}
-              </p>
+
+              {locationMode === 'gps' ? (
+                <div className="rounded-xl border border-gold/40 bg-gold/15 p-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-semibold text-deep-maroon">Detected GPS Location</span>
+                    <button
+                      type="button"
+                      onClick={detectCurrentLocation}
+                      className="text-[11px] font-semibold text-deep-crimson underline"
+                    >
+                      {isDetectingLocation ? 'Reading...' : 'Refresh GPS'}
+                    </button>
+                  </div>
+                  <p className="mt-1 text-[11px] text-slate-600">
+                    {latitude && longitude
+                      ? `Lat: ${latitude.toFixed(5)}, Lon: ${longitude.toFixed(5)}`
+                      : locationStatus}
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-1">
+                  <p className="text-[11px] text-slate-500">
+                    Click anywhere on the campus map below to set the spot pin:
+                  </p>
+                  <div className="h-36 w-full rounded-xl border border-slate-300 overflow-hidden shadow-inner">
+                    <MapContainer
+                      center={[latitude || 14.7937, longitude || 120.8735]}
+                      zoom={16}
+                      className="h-full w-full"
+                    >
+                      <TileLayer
+                        attribution='&copy; OpenStreetMap'
+                        url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                      />
+                      <LocationPicker
+                        coords={[latitude || 14.7937, longitude || 120.8735]}
+                        onPick={(lat, lng) => {
+                          setLatitude(lat);
+                          setLongitude(lng);
+                        }}
+                      />
+                    </MapContainer>
+                  </div>
+                </div>
+              )}
             </div>
+
 
             {/* Spot Name */}
             <div>
@@ -240,22 +327,40 @@ export function ContributeSpotModal({ isOpen, onClose, onSubmitted }: Contribute
             {/* Amenities Checkboxes */}
             <div className="pt-1">
               <span className="block text-xs font-semibold text-slate-700 mb-1.5">Amenities Available</span>
-              <div className="flex flex-wrap gap-4">
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
                 <label className="flex items-center gap-1.5 text-xs text-slate-700 cursor-pointer">
                   <input
                     type="checkbox"
                     checked={hasOutlets}
                     onChange={(e) => setHasOutlets(e.target.checked)}
-                    className="rounded text-emerald-600 focus:ring-emerald-500"
+                    className="rounded accent-deep-crimson"
                   />
                   Has Outlets
                 </label>
                 <label className="flex items-center gap-1.5 text-xs text-slate-700 cursor-pointer">
                   <input
                     type="checkbox"
+                    checked={hasWifi}
+                    onChange={(e) => setHasWifi(e.target.checked)}
+                    className="rounded accent-deep-crimson"
+                  />
+                  Free Wi-Fi
+                </label>
+                <label className="flex items-center gap-1.5 text-xs text-slate-700 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={hasAircon}
+                    onChange={(e) => setHasAircon(e.target.checked)}
+                    className="rounded accent-deep-crimson"
+                  />
+                  Air-Conditioned
+                </label>
+                <label className="flex items-center gap-1.5 text-xs text-slate-700 cursor-pointer">
+                  <input
+                    type="checkbox"
                     checked={isShaded}
                     onChange={(e) => setIsShaded(e.target.checked)}
-                    className="rounded text-emerald-600 focus:ring-emerald-500"
+                    className="rounded accent-deep-crimson"
                   />
                   Shaded
                 </label>
@@ -264,9 +369,18 @@ export function ContributeSpotModal({ isOpen, onClose, onSubmitted }: Contribute
                     type="checkbox"
                     checked={isQuiet}
                     onChange={(e) => setIsQuiet(e.target.checked)}
-                    className="rounded text-emerald-600 focus:ring-emerald-500"
+                    className="rounded accent-deep-crimson"
                   />
                   Quiet Area
+                </label>
+                <label className="flex items-center gap-1.5 text-xs text-slate-700 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={hasRestroom}
+                    onChange={(e) => setHasRestroom(e.target.checked)}
+                    className="rounded accent-deep-crimson"
+                  />
+                  Restroom Nearby
                 </label>
               </div>
             </div>

@@ -25,6 +25,7 @@ export function AdminDashboard({ isOpen, onClose, onSpotsUpdated }: AdminDashboa
   const [approvedSpots, setApprovedSpots] = useState<Spot[]>([]);
   const [loading, setLoading] = useState(false);
   const [actionMessage, setActionMessage] = useState<string | null>(null);
+  const [activeSearchQuery, setActiveSearchQuery] = useState('');
 
   // Form state for adding a verified spot directly
   const [formData, setFormData] = useState({
@@ -208,89 +209,292 @@ export function AdminDashboard({ isOpen, onClose, onSpotsUpdated }: AdminDashboa
         ) : activeTab === 'pending' ? (
           /* TAB 1: PENDING STUDENT CONTRIBUTIONS */
           <div className="space-y-4">
-            <h2 className="text-base font-bold text-slate-800">
-              Student Submissions Awaiting Approval
-            </h2>
+            <div className="flex items-center justify-between pb-2 border-b border-slate-200">
+              <div>
+                <h2 className="text-base font-bold text-slate-900">
+                  Student Submissions Awaiting Approval
+                </h2>
+                <p className="text-xs text-slate-500">
+                  Review student-contributed spots before publishing to the live campus map.
+                </p>
+              </div>
+              <span className="rounded-full bg-gold/25 px-3 py-1 text-xs font-bold text-deep-maroon border border-gold/40">
+                {pendingSpots.length} Pending
+              </span>
+            </div>
 
             {pendingSpots.length === 0 ? (
               <div className="rounded-2xl border border-dashed border-slate-300 p-12 text-center bg-white">
-                <CheckCircle2 className="mx-auto h-8 w-8 text-deep-crimson mb-2" />
+                <CheckCircle2 className="mx-auto h-8 w-8 text-emerald-600 mb-2" />
                 <p className="text-sm font-semibold text-slate-700">All caught up!</p>
                 <p className="text-xs text-slate-500">No pending student contributions to review.</p>
               </div>
             ) : (
-              pendingSpots.map((spot) => (
-                <div
-                  key={spot.id}
-                  className="rounded-2xl border border-amber-200 bg-amber-50/40 p-5 shadow-sm flex flex-col md:flex-row justify-between gap-4"
-                >
-                  <div className="space-y-1">
-                    <div className="flex items-center gap-2">
-                      <span className="text-base font-bold text-slate-900">{spot.name}</span>
-                      <span className="rounded-md bg-amber-200 px-2 py-0.5 text-[10px] font-bold text-amber-900">
-                        {spot.category}
-                      </span>
-                    </div>
-                    <p className="text-xs text-slate-600">{spot.description || 'No description provided.'}</p>
-                    <div className="flex flex-wrap gap-4 text-xs text-slate-500 pt-2">
-                      <span className="flex items-center gap-1">
-                        <MapPin className="h-3.5 w-3.5 text-slate-400" />
-                        {spot.latitude.toFixed(5)}, {spot.longitude.toFixed(5)}
-                      </span>
-                      <span className="flex items-center gap-1">
-                        <Clock className="h-3.5 w-3.5 text-slate-400" />
-                        {spot.hours}
-                      </span>
-                    </div>
-                  </div>
+              /* 3 Columns Responsive Grid */
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {pendingSpots.map((spot: any) => {
+                  // Checks for matching name or coordinates within ~30 meters
+                  const duplicateMatch = approvedSpots.find(
+                    (app) =>
+                      app.name.trim().toLowerCase() === spot.name.trim().toLowerCase() ||
+                      Math.hypot(Number(app.latitude) - Number(spot.latitude), Number(app.longitude) - Number(spot.longitude)) < 0.0003
+                  );
 
-                  <div className="flex items-center gap-2 self-end md:self-center">
-                    <button
-                      onClick={() => handleDelete(spot.id)}
-                      className="flex items-center gap-1 rounded-xl border border-rose-200 bg-white px-3 py-2 text-xs font-semibold text-rose-600 hover:bg-rose-50"
+                  return (
+                    <div
+                      key={spot.id}
+                      className={`flex flex-col justify-between rounded-2xl border bg-white p-4 shadow-sm hover:shadow-md transition-shadow ${
+                        duplicateMatch ? 'border-amber-300 ring-1 ring-amber-200' : 'border-slate-200'
+                      }`}
                     >
-                      <Trash2 className="h-3.5 w-3.5" />
-                      Reject
-                    </button>
-                    <button
-                      onClick={() => handleApprove(spot.id)}
-                      className="flex items-center gap-1 rounded-xl bg-dark-burgundy px-4 py-2 text-xs font-semibold text-white hover:bg-deep-maroon shadow-sm"
-                    >
-                      <CheckCircle2 className="h-3.5 w-3.5" />
-                      Approve & Publish
-                    </button>
+                      <div className="space-y-3">
+                        {/* Duplicate Alert Banner */}
+                        {duplicateMatch && (
+                          <div className="flex items-center gap-1.5 rounded-xl bg-amber-50 p-2 text-xs font-semibold text-amber-800 border border-amber-200">
+                            <AlertTriangle className="h-4 w-4 text-amber-600 shrink-0" />
+                            <span>Possible duplicate of "{duplicateMatch.name}"</span>
+                          </div>
+                        )}
+
+                        {/* Card Header: Title & Category */}
+                      <div className="flex items-start justify-between gap-2">
+                        <div>
+                          <h3 className="font-bold text-sm text-slate-900 leading-snug">{spot.name}</h3>
+                          {spot.location_description && (
+                            <p className="text-[11px] text-slate-500 mt-0.5">{spot.location_description}</p>
+                          )}
+                        </div>
+                        <span className="shrink-0 rounded-md bg-gold/20 px-2 py-0.5 text-[10px] font-bold text-deep-maroon border border-gold/30">
+                          {spot.category}
+                        </span>
+                      </div>
+
+                      {/* Info Badges */}
+                      <div className="space-y-1.5 text-xs text-slate-600 bg-slate-50 p-2.5 rounded-xl border border-slate-100">
+                        <div className="flex items-center gap-1.5">
+                          <Clock className="h-3.5 w-3.5 text-slate-400 shrink-0" />
+                          <span>{spot.hours}</span>
+                        </div>
+                        <div className="flex items-center gap-1.5">
+                          <MapPin className="h-3.5 w-3.5 text-slate-400 shrink-0" />
+                          <span className="font-mono text-[11px]">
+                            {Number(spot.latitude).toFixed(5)}, {Number(spot.longitude).toFixed(5)}
+                          </span>
+                        </div>
+                        {spot.budget_range && (
+                          <div className="text-[11px] text-slate-600 font-medium">
+                            Budget: <span className="text-slate-800">{spot.budget_range}</span>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Amenities Chips */}
+                      <div>
+                        <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 block mb-1">
+                          Amenities Tagged
+                        </span>
+                        <div className="flex flex-wrap gap-1">
+                          {spot.has_outlets && (
+                            <span className="rounded bg-emerald-50 px-1.5 py-0.5 text-[10px] font-medium text-emerald-700 border border-emerald-200">
+                              Outlets
+                            </span>
+                          )}
+                          {spot.has_wifi && (
+                            <span className="rounded bg-blue-50 px-1.5 py-0.5 text-[10px] font-medium text-blue-700 border border-blue-200">
+                              Free Wi-Fi
+                            </span>
+                          )}
+                          {spot.has_aircon && (
+                            <span className="rounded bg-cyan-50 px-1.5 py-0.5 text-[10px] font-medium text-cyan-700 border border-cyan-200">
+                              Aircon
+                            </span>
+                          )}
+                          {spot.is_shaded && (
+                            <span className="rounded bg-amber-50 px-1.5 py-0.5 text-[10px] font-medium text-amber-700 border border-amber-200">
+                              Shaded
+                            </span>
+                          )}
+                          {spot.is_quiet && (
+                            <span className="rounded bg-indigo-50 px-1.5 py-0.5 text-[10px] font-medium text-indigo-700 border border-indigo-200">
+                              Quiet
+                            </span>
+                          )}
+                          {spot.has_restroom && (
+                            <span className="rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-medium text-slate-700 border border-slate-200">
+                              Restroom
+                            </span>
+                          )}
+                          {!spot.has_outlets && !spot.has_wifi && !spot.has_aircon && !spot.is_shaded && !spot.is_quiet && !spot.has_restroom && (
+                            <span className="text-[11px] text-slate-400 italic">None tagged</span>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Student Description / Tips */}
+                      {spot.description && (
+                        <div className="text-xs text-slate-600 bg-amber-50/50 p-2 rounded-lg border border-amber-100 italic">
+                          "{spot.description}"
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Actions: Approve / Reject Buttons */}
+                    <div className="flex items-center gap-2 pt-4 mt-3 border-t border-slate-100">
+                      <button
+                        onClick={() => handleDelete(spot.id)}
+                        className="flex flex-1 items-center justify-center gap-1 rounded-xl border border-rose-200 bg-white py-2 text-xs font-semibold text-rose-600 hover:bg-rose-50 transition-colors"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                        Reject
+                      </button>
+                      <button
+                        onClick={() => handleApprove(spot.id)}
+                        className="flex flex-1 items-center justify-center gap-1 rounded-xl bg-dark-burgundy py-2 text-xs font-semibold text-white hover:bg-deep-maroon shadow-sm transition-colors"
+                      >
+                        <CheckCircle2 className="h-3.5 w-3.5" />
+                        Approve
+                      </button>
+                    </div>
                   </div>
-                </div>
-              ))
+                  );
+                })}
+              </div>
             )}
           </div>
+          
         ) : activeTab === 'approved' ? (
           /* TAB 2: CURRENT ACTIVE SPOTS */
-          <div className="space-y-3">
-            <h2 className="text-base font-bold text-slate-800">Published Campus Spots</h2>
-            {approvedSpots.map((spot) => (
-              <div
-                key={spot.id}
-                className="flex items-center justify-between rounded-xl border border-slate-200 bg-white p-4 shadow-sm"
-              >
-                <div>
-                  <div className="flex items-center gap-2">
-                    <span className="font-semibold text-slate-900 text-sm">{spot.name}</span>
-                    <span className="rounded-md bg-slate-100 px-2 py-0.5 text-[10px] font-medium text-slate-700">
-                      {spot.category}
-                    </span>
-                  </div>
-                  <p className="text-xs text-slate-500">{spot.hours} · {spot.location_description || 'Campus area'}</p>
-                </div>
-                <button
-                  onClick={() => handleDelete(spot.id)}
-                  className="rounded-lg p-2 text-slate-400 hover:bg-rose-50 hover:text-rose-600"
-                  title="Delete Spot"
-                >
-                  <Trash2 className="h-4 w-4" />
-                </button>
+          <div className="space-y-4">
+            {/* Tab Header with Search */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-200">
+              <div>
+                <h2 className="text-base font-bold text-slate-900">
+                  Published Campus Places ({approvedSpots.length})
+                </h2>
+                <p className="text-xs text-slate-500">
+                  Spots currently visible to all students on the live map.
+                </p>
               </div>
-            ))}
+              <input
+                type="text"
+                placeholder="Search active spots..."
+                value={activeSearchQuery}
+                onChange={(e) => setActiveSearchQuery(e.target.value)}
+                className="w-full sm:w-64 rounded-xl border border-slate-200 px-3 py-1.5 text-xs text-slate-800 focus:border-dark-burgundy focus:outline-none focus:ring-1 focus:ring-dark-burgundy/30 bg-white"
+              />
+            </div>
+
+            {/* 3-Column Responsive Grid */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {approvedSpots
+                .filter((spot) =>
+                  spot.name.toLowerCase().includes(activeSearchQuery.toLowerCase()) ||
+                  spot.category.toLowerCase().includes(activeSearchQuery.toLowerCase())
+                )
+                .map((spot: any) => (
+                  <div
+                    key={spot.id}
+                    className="flex flex-col justify-between rounded-2xl border border-slate-200 bg-white p-4 shadow-sm hover:shadow-md transition-all"
+                  >
+                    <div className="space-y-3">
+                      {/* Card Title & Category */}
+                      <div className="flex items-start justify-between gap-2">
+                        <div>
+                          <div className="flex items-center gap-1.5">
+                            <span className="h-2 w-2 rounded-full bg-emerald-500 shrink-0" title="Live on Map" />
+                            <h3 className="font-bold text-sm text-slate-900 leading-snug">{spot.name}</h3>
+                          </div>
+                          {spot.location_description && (
+                            <p className="text-[11px] text-slate-500 mt-1 pl-3.5">{spot.location_description}</p>
+                          )}
+                        </div>
+                        <span className="shrink-0 rounded-md bg-gold/20 px-2 py-0.5 text-[10px] font-bold text-deep-maroon border border-gold/30">
+                          {spot.category}
+                        </span>
+                      </div>
+
+                      {/* Info Details */}
+                      <div className="space-y-1.5 text-xs text-slate-600 bg-slate-50 p-2.5 rounded-xl border border-slate-100">
+                        <div className="flex items-center gap-1.5">
+                          <Clock className="h-3.5 w-3.5 text-slate-400 shrink-0" />
+                          <span>{spot.hours}</span>
+                        </div>
+                        <div className="flex items-center gap-1.5">
+                          <MapPin className="h-3.5 w-3.5 text-slate-400 shrink-0" />
+                          <span className="font-mono text-[11px]">
+                            {Number(spot.latitude).toFixed(5)}, {Number(spot.longitude).toFixed(5)}
+                          </span>
+                        </div>
+                        {spot.budget_range && (
+                          <div className="text-[11px] text-slate-600 font-medium">
+                            Budget: <span className="text-slate-800">{spot.budget_range}</span>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Amenities Badges */}
+                      <div>
+                        <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 block mb-1">
+                          Amenities
+                        </span>
+                        <div className="flex flex-wrap gap-1">
+                          {spot.has_outlets && (
+                            <span className="rounded bg-emerald-50 px-1.5 py-0.5 text-[10px] font-medium text-emerald-700 border border-emerald-200">
+                              Outlets
+                            </span>
+                          )}
+                          {spot.has_wifi && (
+                            <span className="rounded bg-blue-50 px-1.5 py-0.5 text-[10px] font-medium text-blue-700 border border-blue-200">
+                              Wi-Fi
+                            </span>
+                          )}
+                          {spot.has_aircon && (
+                            <span className="rounded bg-cyan-50 px-1.5 py-0.5 text-[10px] font-medium text-cyan-700 border border-cyan-200">
+                              Aircon
+                            </span>
+                          )}
+                          {spot.is_shaded && (
+                            <span className="rounded bg-amber-50 px-1.5 py-0.5 text-[10px] font-medium text-amber-700 border border-amber-200">
+                              Shaded
+                            </span>
+                          )}
+                          {spot.is_quiet && (
+                            <span className="rounded bg-indigo-50 px-1.5 py-0.5 text-[10px] font-medium text-indigo-700 border border-indigo-200">
+                              Quiet
+                            </span>
+                          )}
+                          {spot.has_restroom && (
+                            <span className="rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-medium text-slate-700 border border-slate-200">
+                              Restroom
+                            </span>
+                          )}
+                          {!spot.has_outlets && !spot.has_wifi && !spot.has_aircon && !spot.is_shaded && !spot.is_quiet && !spot.has_restroom && (
+                            <span className="text-[11px] text-slate-400 italic">None tagged</span>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Description */}
+                      {spot.description && (
+                        <p className="text-xs text-slate-600 bg-slate-50 p-2 rounded-lg border border-slate-100 line-clamp-2">
+                          {spot.description}
+                        </p>
+                      )}
+                    </div>
+
+                    {/* Card Action: Delete Button */}
+                    <div className="pt-3 mt-3 border-t border-slate-100 flex justify-end">
+                      <button
+                        onClick={() => handleDelete(spot.id)}
+                        className="flex items-center gap-1.5 rounded-xl border border-rose-200 bg-white px-3 py-1.5 text-xs font-semibold text-rose-600 hover:bg-rose-50 transition-colors"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                        Delete Spot
+                      </button>
+                    </div>
+                  </div>
+                ))}
+            </div>
           </div>
         ) : (
           /* TAB 3: ADMIN ADD NEW SPOT FORM */
