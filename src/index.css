@@ -71,3 +71,7 @@
   border-radius: 9999px;
   background: white;
 }
+
+.tambyte-map .leaflet-top.leaflet-right {
+  top: 46px;
+}
