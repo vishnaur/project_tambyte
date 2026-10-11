@@ -55,13 +55,13 @@ export function SpotDetailPanel({
   return (
     <>
       <div
-        className="fixed inset-0 z-40 bg-black/40 backdrop-blur-xs transition-opacity md:hidden"
+        className="fixed inset-0 z-[1090] bg-black/40 backdrop-blur-xs transition-opacity md:hidden"
         onClick={onClose}
         aria-hidden="true"
       />
 
       <aside
-        className="fixed inset-x-0 bottom-0 z-50 max-h-[85vh] overflow-y-auto rounded-t-3xl border-t border-slate-200 bg-white p-6 shadow-2xl transition-all duration-300 md:absolute md:top-6 md:right-6 md:bottom-auto md:left-auto md:w-96 md:max-h-[calc(100%-3rem)] md:rounded-2xl md:border md:shadow-lg"
+        className="fixed inset-x-0 bottom-0 z-[1100] max-h-[85vh] overflow-y-auto rounded-t-3xl border-t border-slate-200 bg-white p-6 shadow-2xl transition-all duration-300 md:absolute md:top-6 md:right-6 md:bottom-auto md:left-auto md:w-96 md:max-h-[calc(100%-3rem)] md:rounded-2xl md:border md:shadow-lg"
         aria-labelledby="spot-detail-title"
         role="dialog"
         aria-modal="true"
@@ -70,7 +70,7 @@ export function SpotDetailPanel({
 
         <div className="flex items-start justify-between gap-4">
           <div className="min-w-0">
-            <span className="inline-flex rounded-md border border-emerald-200/60 bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-800">
+            <span className="inline-flex rounded-md border border-dark-burgundy/20 bg-warm-cream px-2.5 py-1 text-xs font-semibold text-dark-burgundy">
               {spot.category}
             </span>
             <h2
@@ -83,7 +83,7 @@ export function SpotDetailPanel({
           <button
             type="button"
             onClick={onClose}
-            className="flex min-h-[44px] min-w-[44px] items-center justify-center rounded-xl text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-600"
+            className="flex min-h-[44px] min-w-[44px] items-center justify-center rounded-xl text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-dark-burgundy"
             aria-label="Close spot details"
           >
             <X className="h-5 w-5" aria-hidden="true" />
@@ -99,16 +99,16 @@ export function SpotDetailPanel({
             </div>
           </div>
           {spot.description && (
-            <p className="border-l-2 border-emerald-200 pl-3">{spot.description}</p>
+            <p className="border-l-2 border-gold pl-3">{spot.description}</p>
           )}
           <div className="flex items-start gap-2.5">
-            <Clock className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600" aria-hidden="true" />
+            <Clock className="mt-0.5 h-4 w-4 shrink-0 text-deep-crimson" aria-hidden="true" />
             <div>
               <p>
                 <span className="font-semibold text-slate-800">Hours: </span>
                 <span>{spot.hours?.trim() || 'Information unavailable'}</span>
               </p>
-              <p className={`mt-1 font-medium ${openingStatus === 'open' ? 'text-emerald-700' : openingStatus === 'closed' ? 'text-rose-700' : 'text-slate-500'}`}>
+              <p className={`mt-1 font-medium ${openingStatus === 'open' ? 'text-dark-burgundy' : openingStatus === 'closed' ? 'text-rose-700' : 'text-slate-500'}`}>
                 Status: {OPENING_STATUS_LABELS[openingStatus]}
               </p>
             </div>
@@ -153,7 +153,7 @@ export function SpotDetailPanel({
               <button
                 type="button"
                 onClick={onGetDirections}
-                className="min-h-[44px] w-full rounded-xl bg-emerald-600 px-4 py-2.5 text-xs font-semibold text-white shadow-sm transition-colors hover:bg-emerald-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-600 focus-visible:ring-offset-2"
+                className="min-h-[44px] w-full rounded-xl bg-dark-burgundy px-4 py-2.5 text-xs font-semibold text-white shadow-sm transition-colors hover:bg-deep-maroon focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-dark-burgundy focus-visible:ring-offset-2"
               >
                 Get directions
               </button>
@@ -189,7 +189,7 @@ export function SpotDetailPanel({
           <button
             type="button"
             onClick={onClose}
-            className="min-h-[44px] w-full rounded-xl bg-slate-900 px-4 py-2.5 text-xs font-semibold text-white shadow-sm transition-all hover:bg-slate-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-600"
+            className="min-h-[44px] w-full rounded-xl bg-deep-maroon px-4 py-2.5 text-xs font-semibold text-white shadow-sm transition-all hover:bg-dark-burgundy focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-dark-burgundy"
           >
             Close details
           </button>

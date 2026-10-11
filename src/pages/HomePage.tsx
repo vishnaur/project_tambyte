@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { Navbar } from '../components/Navbar';
 import { FilterPanel } from '../components/FilterPanel';
 import { MapArea } from '../components/MapArea';
@@ -11,11 +12,14 @@ import { supabase } from '../lib/supabase';
 import type { SpotRow } from '../types/database';
 import { calculateDistanceKm } from '../utils/location';
 import { AdminDashboard } from '../components/AdminDashboard';
+import { ContributeSpotModal } from '../components/ContributeSpotModal';
 
 export default function HomePage() {
   const [isMobileFilterOpen, setIsMobileFilterOpen] = useState(false);
+  const [isDesktopFilterOpen, setIsDesktopFilterOpen] = useState(true);
   const [selectedSpot, setSelectedSpot] = useState<SpotRow | null>(null);
   const [isDetailOpen, setIsDetailOpen] = useState(false);
+  const [focusRequest, setFocusRequest] = useState(0);
   const [directionsSpotId, setDirectionsSpotId] = useState<string | null>(null);
   const [locations, setLocations] = useState<SpotRow[]>([]);
   const [isLoadingLocations, setIsLoadingLocations] = useState(true);
@@ -23,6 +27,7 @@ export default function HomePage() {
   const [selectedCategory, setSelectedCategory] = useState('__all__');
   const [reloadLocations, setReloadLocations] = useState(0);
   const [isAdminDashboardOpen, setIsAdminDashboardOpen] = useState(false);
+  const [isContributeModalOpen, setIsContributeModalOpen] = useState(false);
   
   // Modals & Auth State
   const [activeModal, setActiveModal] = useState<'admin' | 'report' | null>(null);
@@ -119,7 +124,15 @@ export default function HomePage() {
     [categoryLocations],
   );
 
-  const handleSelectLocation = (location: SpotRow) => {
+  const handleLocateLocation = (location: SpotRow) => {
+    setSelectedSpot(location);
+    setIsDetailOpen(false);
+    setDirectionsSpotId(null);
+    setFocusRequest((request) => request + 1);
+    setIsMobileFilterOpen(false);
+  };
+
+  const handleViewDetails = (location: SpotRow) => {
     setSelectedSpot(location);
     setIsDetailOpen(true);
     setDirectionsSpotId(null);
@@ -128,6 +141,7 @@ export default function HomePage() {
 
   const handleCloseDetail = () => {
     setIsDetailOpen(false);
+    setSelectedSpot(null);
     setDirectionsSpotId(null);
   };
 
@@ -150,10 +164,11 @@ export default function HomePage() {
   };
 
   return (
-    <div className="flex min-h-screen flex-col bg-slate-50 text-slate-900 antialiased font-sans">
+    <div className="flex min-h-screen flex-col bg-warm-cream text-slate-900 antialiased font-sans">
       {/* 1. Top Navigation Bar */}
       <Navbar
         isAdmin={isAdmin}
+        onShareSpotClick={() => setIsContributeModalOpen(true)}
         onAdminLoginClick={() => setActiveModal('admin')}
         onAdminDashboardClick={() => setIsAdminDashboardOpen(true)}
         onAdminLogoutClick={handleAdminLogout}
@@ -164,36 +179,56 @@ export default function HomePage() {
       {/* 2. Main Content Area */}
       <div className="relative flex flex-1 flex-col md:flex-row overflow-hidden">
         {/* Desktop Left/Side Filter Panel */}
-        <FilterPanel
-          className="hidden md:flex md:w-80 lg:w-88 shrink-0 overflow-y-auto"
-          id="category-select-desktop"
-          categories={categories}
-          selectedCategory={selectedCategory}
-          onCategoryChange={handleCategoryChange}
-        />
+        <div
+          id="desktop-filter-panel"
+          className={`hidden shrink-0 overflow-hidden border-r border-slate-200 transition-[width] duration-300 ease-in-out md:block ${
+            isDesktopFilterOpen ? 'w-80 lg:w-88' : 'w-0 border-r-0'
+          }`}
+          aria-hidden={!isDesktopFilterOpen}
+          inert={!isDesktopFilterOpen}
+        >
+          <FilterPanel
+            className="h-full w-80 overflow-y-auto lg:w-88"
+            id="category-select-desktop"
+            categories={categories}
+            selectedCategory={selectedCategory}
+            onCategoryChange={handleCategoryChange}
+            locations={locations}
+            selectedSpotId={selectedSpot?.id ?? null}
+            onLocateLocation={handleLocateLocation}
+          />
+        </div>
 
         {/* Mobile Collapsible Filter Drawer */}
         {isMobileFilterOpen && (
-          <div className="md:hidden z-20 border-b border-slate-200 bg-white shadow-md animate-in slide-in-from-top-2 duration-200">
+          <div className="md:hidden z-20 border-b border-slate-200 bg-warm-cream shadow-md animate-in slide-in-from-top-2 duration-200">
             <FilterPanel
               className="w-full border-r-0"
               id="category-select-mobile"
               categories={categories}
               selectedCategory={selectedCategory}
               onCategoryChange={handleCategoryChange}
+              locations={locations}
+              selectedSpotId={selectedSpot?.id ?? null}
+              onLocateLocation={handleLocateLocation}
             />
           </div>
         )}
 
         <MapArea
+          onShareSpotClick={() => setIsContributeModalOpen(true)}
           locations={filteredLocations}
           totalLocationCount={locations.length}
           invalidCoordinateCount={categoryLocations.length - filteredLocations.length}
           isLoading={isLoadingLocations}
           loadError={locationLoadError}
           onRetry={() => setReloadLocations((attempt) => attempt + 1)}
-          onSelectLocation={handleSelectLocation}
-          selectedSpotId={isDetailOpen ? selectedSpot?.id ?? null : null}
+          onLocateLocation={handleLocateLocation}
+          onViewDetails={handleViewDetails}
+          selectedSpotId={selectedSpot?.id ?? null}
+          focusRequest={focusRequest}
+          isFilterOpen={isDesktopFilterOpen}
+          onToggleFilter={() => setIsDesktopFilterOpen((isOpen) => !isOpen)}
         />
 
         {/* 3. Spot Details Bottom Sheet / Side Panel */}
@@ -227,44 +262,50 @@ export default function HomePage() {
 
       {/* Placeholder Modal: Report an Issue Notice */}
       {activeModal === 'report' && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-xs"
-          role="dialog"
-          aria-modal="true"
-        >
-          <div className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-xl border border-slate-200">
-            <div className="flex items-start justify-between">
-              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-50 text-emerald-700">
-                <AlertCircle className="h-5 w-5" aria-hidden="true" />
+        createPortal(
+          <div
+            className="fixed inset-0 z-[3000] flex items-center justify-center bg-black/50 p-4 backdrop-blur-xs"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="report-issue-title"
+          >
+            <div className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-xl border border-slate-200">
+              <div className="flex items-start justify-between">
+                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-warm-cream text-dark-burgundy">
+                  <AlertCircle className="h-5 w-5" aria-hidden="true" />
+                </div>
               </div>
-              <button
-                type="button"
-                onClick={() => setActiveModal(null)}
-                className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
-              >
-                <X className="h-4 w-4" aria-hidden="true" />
-              </button>
+              <h3 id="report-issue-title" className="mt-4 text-base font-semibold text-slate-900">
+                Report an Issue
+              </h3>
+              <p className="mt-2 text-xs sm:text-sm text-slate-600 leading-relaxed">
+                Students can report incorrect hours, closed areas, or missing power outlets.
+              </p>
+              <div className="mt-5">
+                <button
+                  type="button"
+                  onClick={() => setActiveModal(null)}
+                  className="w-full min-h-[44px] rounded-xl bg-deep-maroon px-4 py-2 text-xs font-semibold text-white hover:bg-dark-burgundy transition-colors"
+                >
+                  Close
+                </button>
+              </div>
             </div>
-            <h3 className="mt-4 text-base font-semibold text-slate-900">
-              Report an Issue
-            </h3>
-            <p className="mt-2 text-xs sm:text-sm text-slate-600 leading-relaxed">
-              Students can report incorrect hours, closed areas, or missing power outlets.
-            </p>
-            <div className="mt-5">
-              <button
-                type="button"
-                onClick={() => setActiveModal(null)}
-                className="w-full min-h-[44px] rounded-xl bg-slate-900 px-4 py-2 text-xs font-semibold text-white hover:bg-slate-800 transition-colors"
-              >
-                Close
-              </button>
-            </div>
-          </div>
-        </div>
+          </div>,
+          document.body,
+        )
       )}
 
-      {/* Put it right here! */}
+      {/* Student Spot Contribution Modal */}
+      <ContributeSpotModal
+        isOpen={isContributeModalOpen}
+        onClose={() => setIsContributeModalOpen(false)}
+        onSubmitted={() => {
+          setIsContributeModalOpen(false);
+          setReloadLocations((prev) => prev + 1);
+        }}
+      />
+
       <AdminDashboard
         isOpen={isAdminDashboardOpen}
         onClose={() => setIsAdminDashboardOpen(false)}

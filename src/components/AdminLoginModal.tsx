@@ -56,7 +56,7 @@ export function AdminLoginModal({ isOpen, onClose, onLoginSuccess }: AdminLoginM
       <div className="w-full max-w-sm rounded-2xl border border-slate-200 bg-white p-6 shadow-2xl">
         <div className="flex items-center justify-between border-b border-slate-100 pb-3">
           <div className="flex items-center gap-2">
-            <Lock className="h-4 w-4 text-emerald-600" />
+            <Lock className="h-4 w-4 text-dark-burgundy" />
             <h2 className="text-base font-bold text-slate-900">Admin Sign In</h2>
           </div>
           <button
@@ -85,7 +85,7 @@ export function AdminLoginModal({ isOpen, onClose, onLoginSuccess }: AdminLoginM
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder="admin@tambyte.com"
-                className="w-full rounded-xl border border-slate-200 py-2 pl-9 pr-3 text-sm text-slate-800 focus:border-emerald-600 focus:outline-none focus:ring-1 focus:ring-emerald-600"
+                className="w-full rounded-xl border border-slate-200 py-2 pl-9 pr-3 text-sm text-slate-800 focus:border-dark-burgundy focus:outline-none focus:ring-1 focus:ring-dark-burgundy"
               />
             </div>
           </div>
@@ -100,7 +100,7 @@ export function AdminLoginModal({ isOpen, onClose, onLoginSuccess }: AdminLoginM
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="••••••••"
-                className="w-full rounded-xl border border-slate-200 py-2 pl-9 pr-3 text-sm text-slate-800 focus:border-emerald-600 focus:outline-none focus:ring-1 focus:ring-emerald-600"
+                className="w-full rounded-xl border border-slate-200 py-2 pl-9 pr-3 text-sm text-slate-800 focus:border-dark-burgundy focus:outline-none focus:ring-1 focus:ring-dark-burgundy"
               />
             </div>
           </div>
@@ -116,7 +116,7 @@ export function AdminLoginModal({ isOpen, onClose, onLoginSuccess }: AdminLoginM
             <button
               type="submit"
               disabled={loading}
-              className="rounded-xl bg-emerald-600 px-4 py-2 text-xs font-semibold text-white hover:bg-emerald-700 disabled:opacity-50"
+              className="rounded-xl bg-dark-burgundy px-4 py-2 text-xs font-semibold text-white hover:bg-deep-maroon disabled:opacity-50"
             >
               {loading ? 'Verifying...' : 'Sign In'}
             </button>
