@@ -1,5 +1,5 @@
 import React from 'react';
-import { User, LogOut, SlidersHorizontal, X, ShieldCheck, Plus } from 'lucide-react';
+import { User, LogOut, SlidersHorizontal, X, ShieldCheck, } from 'lucide-react';
 
 interface NavbarProps {
   isAdmin?: boolean;
@@ -81,7 +81,7 @@ export function Navbar({
 
       {/* Action Buttons */}
       <div className="flex items-center gap-1 sm:gap-3">
-        <button
+       {/*<button
           type="button"
           onClick={onShareSpotClick}
           className="flex h-10 w-10 items-center justify-center rounded-xl border border-gold/50 bg-deep-crimson text-white shadow-sm transition-colors hover:bg-dark-burgundy focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold focus-visible:ring-offset-2"
@@ -90,6 +90,10 @@ export function Navbar({
         >
           <Plus className="h-5 w-5 stroke-[2.5]" aria-hidden="true" />
         </button>
+        
+        upper left button
+
+        */}
 
         {/* Mobile Filter Toggle */}
         <button
