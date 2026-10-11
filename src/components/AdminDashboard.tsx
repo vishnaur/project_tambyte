@@ -145,25 +145,25 @@ export function AdminDashboard({ isOpen, onClose, onSpotsUpdated }: AdminDashboa
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-[2000] flex flex-col bg-slate-50 overflow-hidden">
+<div className="admin-dashboard fixed inset-0 z-[2000] flex flex-col overflow-hidden bg-[#F9F2E3]">
       {/* Top Header */}
-      <header className="flex h-16 items-center justify-between border-b border-slate-200 bg-white px-6 shadow-sm">
-        <div className="flex items-center gap-3">
+      <header className="admin-header flex min-h-16 flex-col items-stretch gap-3 border-b px-3 py-3 shadow-sm sm:px-4 lg:h-16 lg:flex-row lg:items-center lg:justify-between lg:px-6 lg:py-0">
+        <div className="flex flex-wrap items-center gap-2 sm:gap-3">
           <button
             onClick={onClose}
-            className="flex items-center gap-1.5 rounded-xl border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+            className="flex shrink-0 items-center gap-1.5 rounded-xl border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50"
           >
             <ArrowLeft className="h-4 w-4" />
             Back to Map
           </button>
-          <h1 className="text-lg font-bold text-slate-900">Tambyte Admin Management</h1>
+          <h1 className="text-base font-bold text-slate-900 sm:text-lg">Tambyte Admin Management</h1>
         </div>
 
         {/* Tab Navigation */}
-        <div className="flex rounded-xl bg-slate-100 p-1 text-xs font-semibold">
+        <div className="grid w-full grid-cols-2 gap-1 rounded-xl bg-slate-100 p-1 text-xs font-semibold sm:grid-cols-3 lg:flex lg:w-auto">
           <button
             onClick={() => setActiveTab('pending')}
-            className={`rounded-lg px-3 py-1.5 transition-all ${
+            className={`rounded-lg px-2 py-1.5 text-center transition-all sm:px-3 ${
               activeTab === 'pending'
                 ? 'bg-white text-dark-burgundy shadow-sm'
                 : 'text-slate-600 hover:text-slate-900'
@@ -173,7 +173,7 @@ export function AdminDashboard({ isOpen, onClose, onSpotsUpdated }: AdminDashboa
           </button>
           <button
             onClick={() => setActiveTab('approved')}
-            className={`rounded-lg px-3 py-1.5 transition-all ${
+            className={`rounded-lg px-2 py-1.5 text-center transition-all sm:px-3 ${
               activeTab === 'approved'
                 ? 'bg-white text-dark-burgundy shadow-sm'
                 : 'text-slate-600 hover:text-slate-900'
@@ -183,7 +183,7 @@ export function AdminDashboard({ isOpen, onClose, onSpotsUpdated }: AdminDashboa
           </button>
           <button
             onClick={() => setActiveTab('add')}
-            className={`flex items-center gap-1 rounded-lg px-3 py-1.5 transition-all ${
+            className={`flex items-center justify-center gap-1 rounded-lg px-2 py-1.5 text-center transition-all sm:px-3 ${
               activeTab === 'add'
                 ? 'bg-dark-burgundy text-white shadow-sm'
                 : 'text-slate-600 hover:text-slate-900'
@@ -203,13 +203,13 @@ export function AdminDashboard({ isOpen, onClose, onSpotsUpdated }: AdminDashboa
       )}
 
       {/* Main Content Body */}
-      <main className="flex-1 overflow-y-auto p-6 max-w-5xl mx-auto w-full">
+      <main className="mx-auto w-full max-w-5xl flex-1 overflow-y-auto p-3 sm:p-6">
         {loading ? (
           <p className="text-center text-sm text-slate-500 py-10">Loading database records...</p>
         ) : activeTab === 'pending' ? (
           /* TAB 1: PENDING STUDENT CONTRIBUTIONS */
           <div className="space-y-4">
-            <div className="flex items-center justify-between pb-2 border-b border-slate-200">
+            <div className="flex flex-col items-start justify-between gap-2 border-b border-slate-200 pb-2 sm:flex-row sm:items-center">
               <div>
                 <h2 className="text-base font-bold text-slate-900">
                   Student Submissions Awaiting Approval
@@ -270,7 +270,7 @@ export function AdminDashboard({ isOpen, onClose, onSpotsUpdated }: AdminDashboa
                       </div>
 
                       {/* Info Badges */}
-                      <div className="space-y-1.5 text-xs text-slate-600 bg-slate-50 p-2.5 rounded-xl border border-slate-100">
+                     <div className="admin-info space-y-1.5 rounded-xl border p-2.5 text-xs text-slate-600">
                         <div className="flex items-center gap-1.5">
                           <Clock className="h-3.5 w-3.5 text-slate-400 shrink-0" />
                           <span>{spot.hours}</span>
@@ -394,7 +394,7 @@ export function AdminDashboard({ isOpen, onClose, onSpotsUpdated }: AdminDashboa
                 .map((spot: any) => (
                   <div
                     key={spot.id}
-                    className="flex flex-col justify-between rounded-2xl border border-slate-200 bg-white p-4 shadow-sm hover:shadow-md transition-all"
+                    className="admin-card flex flex-col justify-between rounded-2xl border p-4 shadow-sm transition-all hover:shadow-md"
                   >
                     <div className="space-y-3">
                       {/* Card Title & Category */}
@@ -414,7 +414,7 @@ export function AdminDashboard({ isOpen, onClose, onSpotsUpdated }: AdminDashboa
                       </div>
 
                       {/* Info Details */}
-                      <div className="space-y-1.5 text-xs text-slate-600 bg-slate-50 p-2.5 rounded-xl border border-slate-100">
+                      <div className="admin-info space-y-1.5 rounded-xl border p-2.5 text-xs text-slate-600">
                         <div className="flex items-center gap-1.5">
                           <Clock className="h-3.5 w-3.5 text-slate-400 shrink-0" />
                           <span>{spot.hours}</span>
@@ -498,7 +498,7 @@ export function AdminDashboard({ isOpen, onClose, onSpotsUpdated }: AdminDashboa
           </div>
         ) : (
           /* TAB 3: ADMIN ADD NEW SPOT FORM */
-          <form onSubmit={handleCreateSpot} className="max-w-xl mx-auto rounded-2xl border border-slate-200 bg-white p-6 shadow-sm space-y-4">
+          <form onSubmit={handleCreateSpot} className="mx-auto max-w-xl space-y-4 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-6">
             <h2 className="text-base font-bold text-slate-900">Add Verified Campus Spot</h2>
             
             <div>

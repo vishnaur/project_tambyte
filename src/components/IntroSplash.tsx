@@ -174,7 +174,7 @@ export function IntroSplash({
                 animate={{ opacity: [0.55, 1, 0.55], scale: [0.98, 1, 0.98] }}
                 transition={{ duration: 1.5, repeat: Infinity, ease: 'easeInOut' }}
               >
-                Tap to bite
+                Tap to byte
               </motion.span>
             </button>
           ) : (

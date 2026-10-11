@@ -75,3 +75,52 @@
 .tambyte-map .leaflet-top.leaflet-right {
   top: 46px;
 }
+
+
+/* Warm cream theme for the admin dashboard */
+.admin-dashboard {
+  background-color: #F9F2E3;
+  color: #392820;
+}
+
+.admin-dashboard .admin-header {
+  background-color: #FFF9F0;
+  border-color: #E8D8C3;
+}
+
+.admin-dashboard .admin-card {
+  background-color: #FFFCF6;
+  border-color: #E8D8C3;
+}
+
+.admin-dashboard .admin-info {
+  background-color: #F3E8D7;
+  border-color: #E8D8C3;
+}
+
+.admin-dashboard .admin-muted {
+  color: #8A7665;
+}
+
+.admin-dashboard .admin-divider {
+  border-color: #E8D8C3;
+}
+
+.admin-dashboard input,
+.admin-dashboard select,
+.admin-dashboard textarea {
+  background-color: #FFFCF6;
+  border-color: #E0CFB9;
+  color: #392820;
+}
+
+.admin-dashboard input::placeholder {
+  color: #A08D7A;
+}
+
+.admin-dashboard input:focus,
+.admin-dashboard select:focus,
+.admin-dashboard textarea:focus {
+  border-color: #970023;
+  outline-color: #970023;
+}

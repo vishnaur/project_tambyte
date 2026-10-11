@@ -72,7 +72,7 @@ export function Navbar({
             <span className="text-lg font-bold tracking-tight text-warm-cream leading-none">
               Tambyte
             </span>
-            <span className="text-[11px] font-medium text-warm-cream mt-0.5 leading-none max-[380px]:hidden">
+            <span className="mt-0.5 hidden text-[11px] font-medium leading-none text-warm-cream sm:block">
               Grab A Byte &amp; Tambay Maps
             </span>
           </div>
@@ -80,7 +80,7 @@ export function Navbar({
       </div>
 
       {/* Action Buttons */}
-      <div className="flex items-center gap-2 sm:gap-3">
+      <div className="flex items-center gap-1 sm:gap-3">
         <button
           type="button"
           onClick={onShareSpotClick}
@@ -95,13 +95,13 @@ export function Navbar({
         <button
           type="button"
           onClick={onToggleMobileFilters}
-          className="flex md:hidden min-h-[44px] items-center gap-1.5 rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-2 text-xs font-medium text-slate-700 hover:bg-slate-100 hover:text-slate-900 max-[380px]:px-2.5"
+          className="flex min-h-[44px] items-center gap-1.5 rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-2 text-xs font-medium text-slate-700 hover:bg-slate-100 hover:text-slate-900 max-[380px]:px-2.5 md:hidden"
           aria-label={isFilterOpenOnMobile ? 'Close filters' : 'Open filters'}
         >
           {isFilterOpenOnMobile ? (
             <>
               <X className="h-4 w-4" />
-              <span>Close</span>
+              <span className="max-[380px]:hidden">Close</span>
             </>
           ) : (
             <>
@@ -114,34 +114,39 @@ export function Navbar({
 
         {/* When Logged In as Admin vs Visitor */}
         {isAdmin ? (
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1 sm:gap-2">
             <button
               type="button"
               onClick={onAdminDashboardClick}
-              className="flex min-h-[40px] items-center gap-1.5 rounded-xl bg-dark-burgundy px-3.5 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-deep-maroon transition-colors"
+              className="flex h-10 w-10 items-center justify-center gap-1.5 rounded-xl bg-dark-burgundy px-0 text-xs font-semibold text-white shadow-sm transition-colors hover:bg-deep-maroon sm:h-auto sm:w-auto sm:min-h-[40px] sm:px-3.5 sm:py-1.5"
+              aria-label="Manage Spots"
+              title="Manage Spots"
             >
               <ShieldCheck className="h-4 w-4" />
-              <span>Manage Spots</span>
+              <span className="hidden sm:inline">Manage Spots</span>
             </button>
 
             <button
               type="button"
               onClick={onAdminLogoutClick}
-              className="flex min-h-[40px] items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 shadow-sm hover:bg-slate-50"
+              className="flex h-10 w-10 items-center justify-center gap-1.5 rounded-xl border border-slate-200 bg-white px-0 text-xs font-semibold text-slate-700 shadow-sm hover:bg-slate-50 sm:h-auto sm:w-auto sm:min-h-[40px] sm:px-3 sm:py-1.5"
+              aria-label="Sign Out"
+              title="Sign Out"
             >
               <LogOut className="h-3.5 w-3.5 text-slate-500" />
-              <span>Sign Out</span>
+              <span className="hidden sm:inline">Sign Out</span>
             </button>
           </div>
         ) : (
           <button
             type="button"
             onClick={onAdminLoginClick}
-            className="flex min-h-[40px] items-center gap-2 rounded-xl bg-deep-maroon px-4 py-2 text-xs font-semibold text-white shadow-sm transition-all hover:bg-dark-burgundy active:scale-[0.98] max-[380px]:px-2.5"
+            className="flex h-10 w-10 items-center justify-center gap-2 rounded-xl bg-deep-maroon px-0 text-xs font-semibold text-white shadow-sm transition-all hover:bg-dark-burgundy active:scale-[0.98] sm:h-auto sm:w-auto sm:min-h-[40px] sm:px-4 sm:py-2"
             aria-label="Admin Login"
+            title="Admin Login"
           >
             <User className="h-3.5 w-3.5 text-slate-300" />
-            <span className="whitespace-nowrap max-[380px]:hidden">Admin Login</span>
+            <span className="hidden whitespace-nowrap sm:inline">Admin Login</span>
           </button>
         )}
       </div>
