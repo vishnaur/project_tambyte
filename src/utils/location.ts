@@ -8,6 +8,16 @@ const HOURS_RANGE_PATTERN =
 
 export type OpeningStatus = 'open' | 'closed' | 'unavailable';
 
+export interface WalkingRoute {
+  coordinates: [number, number][];
+  distanceKm: number;
+  durationMinutes: number;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null;
+}
+
 export function calculateDistanceKm(
   origin: Pick<SpotRow, 'latitude' | 'longitude'>,
   destination: Pick<SpotRow, 'latitude' | 'longitude'>,
@@ -76,15 +86,68 @@ export function getOpeningStatus(hours: string | null | undefined, now = new Dat
   return isOpen ? 'open' : 'closed';
 }
 
-export function getOpenStreetMapDirectionsUrl(
+export async function getWalkingRoute(
   destination: Pick<SpotRow, 'latitude' | 'longitude'>,
-): string {
-  const route = [
-    `${BULSU_MENESES_CAMPUS.latitude},${BULSU_MENESES_CAMPUS.longitude}`,
-    `${destination.latitude},${destination.longitude}`,
-  ]
-    .map((point) => encodeURIComponent(point))
-    .join('%3B');
+  signal?: AbortSignal,
+): Promise<WalkingRoute> {
+  const coordinates = [
+    `${BULSU_MENESES_CAMPUS.longitude},${BULSU_MENESES_CAMPUS.latitude}`,
+    `${destination.longitude},${destination.latitude}`,
+  ].join(';');
+  const params = new URLSearchParams({
+    overview: 'full',
+    geometries: 'geojson',
+    steps: 'false',
+  });
+  const response = await fetch(
+    `https://routing.openstreetmap.de/routed-foot/route/v1/driving/${coordinates}?${params}`,
+    { signal },
+  );
 
-  return `https://www.openstreetmap.org/directions?engine=fossgis_osrm_car&route=${route}`;
+  if (!response.ok) {
+    throw new Error(`Walking directions service returned ${response.status}.`);
+  }
+
+  const payload: unknown = await response.json();
+  if (!isRecord(payload) || payload.code !== 'Ok' || !Array.isArray(payload.routes)) {
+    throw new Error('Walking directions are unavailable for this location.');
+  }
+
+  const route = payload.routes[0];
+  if (
+    !isRecord(route) ||
+    typeof route.distance !== 'number' ||
+    !Number.isFinite(route.distance) ||
+    typeof route.duration !== 'number' ||
+    !Number.isFinite(route.duration) ||
+    !isRecord(route.geometry) ||
+    !Array.isArray(route.geometry.coordinates)
+  ) {
+    throw new Error('Walking directions service returned an unexpected route.');
+  }
+
+  const routeCoordinates = route.geometry.coordinates;
+  const parsedCoordinates: [number, number][] = [];
+  for (const coordinate of routeCoordinates) {
+    if (
+      !Array.isArray(coordinate) ||
+      typeof coordinate[0] !== 'number' ||
+      !Number.isFinite(coordinate[0]) ||
+      typeof coordinate[1] !== 'number' ||
+      !Number.isFinite(coordinate[1])
+    ) {
+      throw new Error('Walking directions service returned invalid map coordinates.');
+    }
+    parsedCoordinates.push([coordinate[1], coordinate[0]]);
+  }
+
+  if (parsedCoordinates.length < 2) {
+    throw new Error('Walking directions service returned an incomplete route.');
+  }
+
+  return {
+    coordinates: parsedCoordinates,
+    distanceKm: route.distance / 1000,
+    durationMinutes: Math.max(1, Math.ceil(route.duration / 60)),
+  };
 }

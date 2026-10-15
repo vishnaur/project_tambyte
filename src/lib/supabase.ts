@@ -24,9 +24,15 @@ export interface Spot {
   budget_range?: string;
   estimated_walk_mins?: number;
   has_outlets?: boolean;
+  has_wifi?: boolean;
+  has_aircon?: boolean;
+  has_restroom?: boolean;
   is_shaded?: boolean;
   is_quiet?: boolean;
   approved: boolean;
+  admin_edited?: boolean;
+  approved_by?: string | null;
+  approved_at?: string | null;
   created_at?: string;
 }
 

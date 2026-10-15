@@ -94,8 +94,9 @@
 }
 
 .admin-dashboard .admin-info {
-  background-color: #F3E8D7;
-  border-color: #E8D8C3;
+  background-color: #FFF1D1;
+  border-color: #E6B34A;
+  color: #460B12;
 }
 
 .admin-dashboard .admin-muted {

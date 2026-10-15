@@ -1,8 +1,8 @@
 import React, { useEffect, useState } from 'react';
-import { Clock, ExternalLink, MapPin, Volume2, X, Zap } from 'lucide-react';
+import { AlertCircle, Clock, Footprints, MapPin, Volume2, X, Zap } from 'lucide-react';
 import { BULSU_MENESES_CAMPUS } from '../constants/locations';
 import type { SpotRow } from '../types/database';
-import { getOpeningStatus, getOpenStreetMapDirectionsUrl, type OpeningStatus } from '../utils/location';
+import { getOpeningStatus, type OpeningStatus, type WalkingRoute } from '../utils/location';
 
 interface SpotDetailPanelProps {
   isOpen: boolean;
@@ -10,7 +10,11 @@ interface SpotDetailPanelProps {
   spot: SpotRow | null;
   distanceKm: number | null;
   directionsRequested: boolean;
+  directionsLoading: boolean;
+  directionsError: string | null;
+  walkingRoute: WalkingRoute | null;
   onGetDirections: () => void;
+  onRetryDirections: () => void;
   onClearDirections: () => void;
 }
 
@@ -26,7 +30,11 @@ export function SpotDetailPanel({
   spot,
   distanceKm,
   directionsRequested,
+  directionsLoading,
+  directionsError,
+  walkingRoute,
   onGetDirections,
+  onRetryDirections,
   onClearDirections,
 }: SpotDetailPanelProps) {
   const [, setClockTick] = useState(0);
@@ -160,19 +168,42 @@ export function SpotDetailPanel({
             ) : (
               <div className="space-y-3 rounded-xl border border-slate-200 bg-slate-50 p-3.5">
                 <h3 className="text-sm font-semibold text-slate-900">Directions</h3>
-                <p className="text-xs leading-relaxed text-slate-600">
-                  From {BULSU_MENESES_CAMPUS.name} to {spot.name}. OpenStreetMap will calculate
-                  the road route. No in-app route or travel-time estimate is available.
-                </p>
-                <a
-                  href={getOpenStreetMapDirectionsUrl(spot)}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex min-h-[40px] w-full items-center justify-center gap-2 rounded-lg bg-slate-900 px-3 py-2 text-xs font-semibold text-white hover:bg-slate-800"
-                >
-                  Open directions on OpenStreetMap
-                  <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
-                </a>
+                {directionsLoading ? (
+                  <p className="text-xs text-slate-600" role="status">
+                    Finding a walking route from {BULSU_MENESES_CAMPUS.name}…
+                  </p>
+                ) : directionsError ? (
+                  <div className="space-y-2" role="alert">
+                    <p className="flex items-start gap-2 text-xs leading-relaxed text-rose-700">
+                      <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
+                      {directionsError}
+                    </p>
+                    <button
+                      type="button"
+                      onClick={onRetryDirections}
+                      className="min-h-[40px] w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-100"
+                    >
+                      Try again
+                    </button>
+                  </div>
+                ) : walkingRoute ? (
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-2 text-dark-burgundy">
+                      <Footprints className="h-4 w-4 shrink-0 text-deep-crimson" aria-hidden="true" />
+                      <p className="text-sm font-bold">
+                        {walkingRoute.durationMinutes} min walk
+                      </p>
+                    </div>
+                    <p className="text-xs text-slate-600">
+                      {walkingRoute.distanceKm < 1
+                        ? `${Math.round(walkingRoute.distanceKm * 1000)} m`
+                        : `${walkingRoute.distanceKm.toFixed(1)} km`} road distance
+                    </p>
+                    <p className="text-[11px] text-slate-500">
+                      Estimated walking time · route by OpenStreetMap
+                    </p>
+                  </div>
+                ) : null}
                 <button
                   type="button"
                   onClick={onClearDirections}

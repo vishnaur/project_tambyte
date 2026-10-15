@@ -34,9 +34,10 @@ const userLocationIcon = L.divIcon({
   iconAnchor: [11, 11],
 });
 import { useEffect, useRef, useState } from 'react';
-import { MapContainer, Marker, Popup, TileLayer, ZoomControl, Circle, useMap } from 'react-leaflet'; 
+import { MapContainer, Marker, Popup, TileLayer, ZoomControl, Circle, Polyline, useMap } from 'react-leaflet';
 import { BULSU_MENESES_CAMPUS } from '../constants/locations';
 import type { SpotRow } from '../types/database';
+import type { WalkingRoute } from '../utils/location';
 
 interface CampusWeather {
   temperature: number;
@@ -309,6 +310,7 @@ function CampusWeatherBadge() {
 interface MapAreaProps {
   selectedSpotId: string | null;
   focusRequest: number;
+  walkingRoute: WalkingRoute | null;
   locations: readonly SpotRow[];
   totalLocationCount: number;
   invalidCoordinateCount: number;
@@ -333,6 +335,22 @@ function MapResizeHandler() {
     observer.observe(container);
     return () => observer.disconnect();
   }, [map]);
+
+  return null;
+}
+
+function FitWalkingRoute({ route }: { route: WalkingRoute | null }) {
+  const map = useMap();
+
+  useEffect(() => {
+    if (!route) return;
+
+    map.fitBounds(route.coordinates, {
+      padding: [48, 48],
+      maxZoom: 17,
+      animate: true,
+    });
+  }, [map, route]);
 
   return null;
 }
@@ -412,6 +430,7 @@ function hasValidCoordinates(location: SpotRow) {
 export function MapArea({
   selectedSpotId,
   focusRequest,
+  walkingRoute,
   locations,
   totalLocationCount,
   invalidCoordinateCount,
@@ -499,6 +518,7 @@ export function MapArea({
             focusRequest={focusRequest}
             markerRefs={markerRefs}
           />
+          <FitWalkingRoute route={walkingRoute} />
           <CampusWeatherBadge />
           <ZoomControl position="topright" />
           <TileLayer
@@ -507,6 +527,13 @@ export function MapArea({
             maxNativeZoom={18}
             maxZoom={18}
           />
+
+          {walkingRoute && (
+            <Polyline
+              positions={walkingRoute.coordinates}
+              pathOptions={{ color: '#970023', weight: 6, opacity: 0.85 }}
+            />
+          )}
 
           {/* Real-time "You Are Here" Pointer */}
           {userLocation && (

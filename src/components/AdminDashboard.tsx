@@ -1,7 +1,56 @@
 import React, { useEffect, useState } from 'react';
 import { supabase, Spot } from '../lib/supabase';
-import { CheckCircle2, Trash2, Plus, Clock, MapPin, X, AlertTriangle, ArrowLeft } from 'lucide-react';
+import { CheckCircle2, Trash2, Plus, Clock, MapPin, X, AlertTriangle, ArrowLeft, Pencil, ShieldCheck } from 'lucide-react';
 import { MapContainer, TileLayer, Marker, useMapEvents } from 'react-leaflet';
+import { BULSU_MENESES_CAMPUS } from '../constants/locations';
+
+const SPOT_CATEGORIES: Spot['category'][] = [
+  'Food',
+  'Study',
+  'Relaxation',
+  'Recreation',
+  'Shopping',
+  'Essentials',
+  'Other',
+];
+
+function createDefaultSpotFormData(): Omit<Spot, 'id' | 'approved' | 'created_at'> {
+  return {
+    name: '',
+    category: 'Food' as Spot['category'],
+    description: '',
+    location_description: '',
+    latitude: BULSU_MENESES_CAMPUS.latitude,
+    longitude: BULSU_MENESES_CAMPUS.longitude,
+    hours: '8:00 AM - 5:00 PM',
+    open_time: '08:00:00',
+    close_time: '17:00:00',
+    budget_range: 'Php 50 - 100',
+    has_outlets: false,
+    has_wifi: false,
+    has_aircon: false,
+    has_restroom: false,
+    is_shaded: false,
+    is_quiet: false,
+  };
+}
+
+type SpotEditForm = {
+  name: string;
+  category: Spot['category'];
+  description: string;
+  location_description: string;
+  latitude: string;
+  longitude: string;
+  hours: string;
+  budget_range: string;
+  has_outlets: boolean;
+  has_wifi: boolean;
+  has_aircon: boolean;
+  has_restroom: boolean;
+  is_shaded: boolean;
+  is_quiet: boolean;
+};
 
 // Click listener to pick coordinates on the map
 function MapPicker({ coords, onPick }: { coords: [number, number]; onPick: (lat: number, lng: number) => void }) {
@@ -24,25 +73,14 @@ export function AdminDashboard({ isOpen, onClose, onSpotsUpdated }: AdminDashboa
   const [pendingSpots, setPendingSpots] = useState<Spot[]>([]);
   const [approvedSpots, setApprovedSpots] = useState<Spot[]>([]);
   const [loading, setLoading] = useState(false);
+  const [isSavingEdit, setIsSavingEdit] = useState(false);
   const [actionMessage, setActionMessage] = useState<string | null>(null);
   const [activeSearchQuery, setActiveSearchQuery] = useState('');
+  const [editingSpot, setEditingSpot] = useState<Spot | null>(null);
+  const [editFormData, setEditFormData] = useState<SpotEditForm | null>(null);
 
   // Form state for adding a verified spot directly
-  const [formData, setFormData] = useState({
-    name: '',
-    category: 'Food',
-    description: '',
-    location_description: '',
-    latitude: 14.7937,
-    longitude: 120.8735,
-    hours: '8:00 AM - 5:00 PM',
-    open_time: '08:00:00',
-    close_time: '17:00:00',
-    budget_range: 'Php 50 - 100',
-    has_outlets: false,
-    is_shaded: false,
-    is_quiet: false,
-  });
+  const [formData, setFormData] = useState(createDefaultSpotFormData);
 
   useEffect(() => {
     if (isOpen) {
@@ -78,16 +116,133 @@ export function AdminDashboard({ isOpen, onClose, onSpotsUpdated }: AdminDashboa
 
   // Action: Approve student submission
   async function handleApprove(id: string) {
-    const { error } = await supabase
-      .from('spots')
-      .update({ approved: true })
-      .eq('id', id);
-
-    if (!error) {
-      setActionMessage('Spot approved and added to the live map!');
-      loadSpots();
-      onSpotsUpdated();
+    const { data: { user }, error: userError } = await supabase.auth.getUser();
+    if (userError || !user) {
+      setActionMessage(`Unable to verify the admin account: ${userError?.message ?? 'No signed-in user.'}`);
+      return;
     }
+
+    const { data, error } = await supabase
+      .from('spots')
+      .update({
+        approved: true,
+        approved_by: user.id,
+        approved_at: new Date().toISOString(),
+      })
+      .eq('id', id)
+      .eq('approved', false)
+      .select('id')
+      .maybeSingle();
+
+    if (error) {
+      setActionMessage(`Unable to approve spot: ${error.message}`);
+      return;
+    }
+    if (!data) {
+      setActionMessage('This submission is no longer pending. Refresh the dashboard and try again.');
+      await loadSpots();
+      return;
+    }
+
+    setActionMessage('Spot approved and added to the live map!');
+    await loadSpots();
+    onSpotsUpdated();
+  }
+
+  function openEditSpot(spot: Spot) {
+    setEditingSpot(spot);
+    setEditFormData({
+      name: spot.name,
+      category: spot.category,
+      description: spot.description ?? '',
+      location_description: spot.location_description ?? '',
+      latitude: String(spot.latitude),
+      longitude: String(spot.longitude),
+      hours: spot.hours,
+      budget_range: spot.budget_range ?? '',
+      has_outlets: Boolean(spot.has_outlets),
+      has_wifi: Boolean(spot.has_wifi),
+      has_aircon: Boolean(spot.has_aircon),
+      has_restroom: Boolean(spot.has_restroom),
+      is_shaded: Boolean(spot.is_shaded),
+      is_quiet: Boolean(spot.is_quiet),
+    });
+  }
+
+  async function handleUpdateSpot(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!editingSpot || !editFormData) return;
+
+    const latitude = Number(editFormData.latitude);
+    const longitude = Number(editFormData.longitude);
+    if (
+      !Number.isFinite(latitude) ||
+      latitude < -90 ||
+      latitude > 90 ||
+      !Number.isFinite(longitude) ||
+      longitude < -180 ||
+      longitude > 180
+    ) {
+      setActionMessage('Enter valid latitude and longitude coordinates before saving.');
+      return;
+    }
+    if (!editFormData.name.trim() || !editFormData.hours.trim()) {
+      setActionMessage('Place name and operating hours are required.');
+      return;
+    }
+
+    setIsSavingEdit(true);
+    const { data, error } = await supabase
+      .from('spots')
+      .update({
+        name: editFormData.name.trim(),
+        category: editFormData.category,
+        description: editFormData.description.trim(),
+        location_description: editFormData.location_description.trim(),
+        latitude,
+        longitude,
+        hours: editFormData.hours.trim(),
+        budget_range: editFormData.budget_range.trim(),
+        has_outlets: editFormData.has_outlets,
+        has_wifi: editFormData.has_wifi,
+        has_aircon: editFormData.has_aircon,
+        has_restroom: editFormData.has_restroom,
+        is_shaded: editFormData.is_shaded,
+        is_quiet: editFormData.is_quiet,
+        approved: editingSpot.approved,
+        admin_edited: true,
+        ...(!editingSpot.approved && {
+          approved_by: null,
+          approved_at: null,
+        }),
+      })
+      .eq('id', editingSpot.id)
+      .eq('approved', editingSpot.approved)
+      .select('id')
+      .maybeSingle();
+    setIsSavingEdit(false);
+
+    if (error) {
+      setActionMessage(`Unable to save changes: ${error.message}`);
+      return;
+    }
+    if (!data) {
+      setActionMessage('This submission is no longer pending. Refresh the dashboard and try again.');
+      setEditingSpot(null);
+      setEditFormData(null);
+      await loadSpots();
+      return;
+    }
+
+    setEditingSpot(null);
+    setEditFormData(null);
+    setActionMessage(
+      editingSpot.approved
+        ? 'Active place updated successfully.'
+        : 'Changes saved. This submission still needs admin approval.',
+    );
+    await loadSpots();
+    onSpotsUpdated();
   }
 
   // Action: Reject or Delete spot
@@ -99,11 +254,14 @@ export function AdminDashboard({ isOpen, onClose, onSpotsUpdated }: AdminDashboa
       .delete()
       .eq('id', id);
 
-    if (!error) {
-      setActionMessage('Spot removed successfully.');
-      loadSpots();
-      onSpotsUpdated();
+    if (error) {
+      setActionMessage(`Unable to remove spot: ${error.message}`);
+      return;
     }
+
+    setActionMessage('Spot removed successfully.');
+    await loadSpots();
+    onSpotsUpdated();
   }
 
   // Action: Admin manually adding a verified spot
@@ -119,27 +277,16 @@ export function AdminDashboard({ isOpen, onClose, onSpotsUpdated }: AdminDashboa
     ]);
 
     setLoading(false);
-    if (!error) {
-      setActionMessage('New spot added directly to map!');
-      setFormData({
-        name: '',
-        category: 'Food',
-        description: '',
-        location_description: '',
-        latitude: 14.7937,
-        longitude: 120.8735,
-        hours: '8:00 AM - 5:00 PM',
-        open_time: '08:00:00',
-        close_time: '17:00:00',
-        budget_range: 'Php 50 - 100',
-        has_outlets: false,
-        is_shaded: false,
-        is_quiet: false,
-      });
-      setActiveTab('approved');
-      loadSpots();
-      onSpotsUpdated();
+    if (error) {
+      setActionMessage(`Unable to add spot: ${error.message}`);
+      return;
     }
+
+    setActionMessage('New spot added directly to map!');
+    setFormData(createDefaultSpotFormData());
+    setActiveTab('approved');
+    await loadSpots();
+    onSpotsUpdated();
   }
 
   if (!isOpen) return null;
@@ -260,6 +407,11 @@ export function AdminDashboard({ isOpen, onClose, onSpotsUpdated }: AdminDashboa
                       <div className="flex items-start justify-between gap-2">
                         <div>
                           <h3 className="font-bold text-sm text-slate-900 leading-snug">{spot.name}</h3>
+                          {spot.admin_edited && (
+                            <span className="mt-1 inline-flex rounded-full border border-gold/40 bg-gold/10 px-2 py-0.5 text-[10px] font-semibold text-dark-burgundy">
+                              Edited by admin · pending approval
+                            </span>
+                          )}
                           {spot.location_description && (
                             <p className="text-[11px] text-slate-500 mt-0.5">{spot.location_description}</p>
                           )}
@@ -270,20 +422,20 @@ export function AdminDashboard({ isOpen, onClose, onSpotsUpdated }: AdminDashboa
                       </div>
 
                       {/* Info Badges */}
-                     <div className="admin-info space-y-1.5 rounded-xl border p-2.5 text-xs text-slate-600">
+                     <div className="admin-info space-y-1.5 rounded-xl border p-2.5 text-xs">
                         <div className="flex items-center gap-1.5">
-                          <Clock className="h-3.5 w-3.5 text-slate-400 shrink-0" />
+                          <Clock className="h-3.5 w-3.5 text-gold shrink-0" />
                           <span>{spot.hours}</span>
                         </div>
                         <div className="flex items-center gap-1.5">
-                          <MapPin className="h-3.5 w-3.5 text-slate-400 shrink-0" />
+                          <MapPin className="h-3.5 w-3.5 text-gold shrink-0" />
                           <span className="font-mono text-[11px]">
                             {Number(spot.latitude).toFixed(5)}, {Number(spot.longitude).toFixed(5)}
                           </span>
                         </div>
                         {spot.budget_range && (
-                          <div className="text-[11px] text-slate-600 font-medium">
-                            Budget: <span className="text-slate-800">{spot.budget_range}</span>
+                          <div className="text-[11px] font-medium">
+                            Budget: <span className="font-bold text-deep-maroon">{spot.budget_range}</span>
                           </div>
                         )}
                       </div>
@@ -332,7 +484,7 @@ export function AdminDashboard({ isOpen, onClose, onSpotsUpdated }: AdminDashboa
 
                       {/* Student Description / Tips */}
                       {spot.description && (
-                        <div className="text-xs text-slate-600 bg-amber-50/50 p-2 rounded-lg border border-amber-100 italic">
+                        <div className="rounded-lg border border-gold/40 bg-gold/10 p-2 text-xs italic text-dark-burgundy">
                           "{spot.description}"
                         </div>
                       )}
@@ -342,14 +494,22 @@ export function AdminDashboard({ isOpen, onClose, onSpotsUpdated }: AdminDashboa
                     <div className="flex items-center gap-2 pt-4 mt-3 border-t border-slate-100">
                       <button
                         onClick={() => handleDelete(spot.id)}
-                        className="flex flex-1 items-center justify-center gap-1 rounded-xl border border-rose-200 bg-white py-2 text-xs font-semibold text-rose-600 hover:bg-rose-50 transition-colors"
+                        className="flex min-w-0 flex-1 items-center justify-center gap-1 rounded-xl border border-rose-200 bg-white py-2 text-xs font-semibold text-rose-600 hover:bg-rose-50 transition-colors"
                       >
                         <Trash2 className="h-3.5 w-3.5" />
                         Reject
                       </button>
                       <button
+                        type="button"
+                        onClick={() => openEditSpot(spot)}
+                        className="flex min-w-0 flex-1 items-center justify-center gap-1 rounded-xl border border-gold/50 bg-gold/10 py-2 text-xs font-semibold text-dark-burgundy transition-colors hover:bg-gold/20"
+                      >
+                        <Pencil className="h-3.5 w-3.5" />
+                        Edit
+                      </button>
+                      <button
                         onClick={() => handleApprove(spot.id)}
-                        className="flex flex-1 items-center justify-center gap-1 rounded-xl bg-dark-burgundy py-2 text-xs font-semibold text-white hover:bg-deep-maroon shadow-sm transition-colors"
+                        className="flex min-w-0 flex-1 items-center justify-center gap-1 rounded-xl bg-dark-burgundy py-2 text-xs font-semibold text-white hover:bg-deep-maroon shadow-sm transition-colors"
                       >
                         <CheckCircle2 className="h-3.5 w-3.5" />
                         Approve
@@ -413,21 +573,28 @@ export function AdminDashboard({ isOpen, onClose, onSpotsUpdated }: AdminDashboa
                         </span>
                       </div>
 
+                      {spot.admin_edited && spot.approved && (
+                        <div className="flex items-center gap-1.5 rounded-lg border border-emerald-200 bg-emerald-50 px-2 py-1.5 text-[11px] font-medium text-emerald-800">
+                          <ShieldCheck className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                          Edited and approved by admin
+                        </div>
+                      )}
+
                       {/* Info Details */}
-                      <div className="admin-info space-y-1.5 rounded-xl border p-2.5 text-xs text-slate-600">
+                      <div className="admin-info space-y-1.5 rounded-xl border p-2.5 text-xs">
                         <div className="flex items-center gap-1.5">
-                          <Clock className="h-3.5 w-3.5 text-slate-400 shrink-0" />
+                          <Clock className="h-3.5 w-3.5 text-gold shrink-0" />
                           <span>{spot.hours}</span>
                         </div>
                         <div className="flex items-center gap-1.5">
-                          <MapPin className="h-3.5 w-3.5 text-slate-400 shrink-0" />
+                          <MapPin className="h-3.5 w-3.5 text-gold shrink-0" />
                           <span className="font-mono text-[11px]">
                             {Number(spot.latitude).toFixed(5)}, {Number(spot.longitude).toFixed(5)}
                           </span>
                         </div>
                         {spot.budget_range && (
-                          <div className="text-[11px] text-slate-600 font-medium">
-                            Budget: <span className="text-slate-800">{spot.budget_range}</span>
+                          <div className="text-[11px] font-medium">
+                            Budget: <span className="font-bold text-deep-maroon">{spot.budget_range}</span>
                           </div>
                         )}
                       </div>
@@ -476,14 +643,22 @@ export function AdminDashboard({ isOpen, onClose, onSpotsUpdated }: AdminDashboa
 
                       {/* Description */}
                       {spot.description && (
-                        <p className="text-xs text-slate-600 bg-slate-50 p-2 rounded-lg border border-slate-100 line-clamp-2">
+                        <p className="line-clamp-2 rounded-lg border border-gold/40 bg-gold/10 p-2 text-xs text-dark-burgundy">
                           {spot.description}
                         </p>
                       )}
                     </div>
 
-                    {/* Card Action: Delete Button */}
-                    <div className="pt-3 mt-3 border-t border-slate-100 flex justify-end">
+                    {/* Card Actions */}
+                    <div className="mt-3 flex items-center justify-end gap-2 border-t border-slate-100 pt-3">
+                      <button
+                        type="button"
+                        onClick={() => openEditSpot(spot)}
+                        className="flex items-center gap-1.5 rounded-xl border border-gold/50 bg-gold/10 px-3 py-1.5 text-xs font-semibold text-dark-burgundy transition-colors hover:bg-gold/20"
+                      >
+                        <Pencil className="h-3.5 w-3.5" />
+                        Edit Spot
+                      </button>
                       <button
                         onClick={() => handleDelete(spot.id)}
                         className="flex items-center gap-1.5 rounded-xl border border-rose-200 bg-white px-3 py-1.5 text-xs font-semibold text-rose-600 hover:bg-rose-50 transition-colors"
@@ -518,10 +693,13 @@ export function AdminDashboard({ isOpen, onClose, onSpotsUpdated }: AdminDashboa
                 <label className="block text-xs font-semibold text-slate-700">Category</label>
                 <select
                   value={formData.category}
-                  onChange={(e) => setFormData({ ...formData, category: e.target.value })}
+                  onChange={(e) => {
+                    const category = SPOT_CATEGORIES.find((option) => option === e.target.value);
+                    if (category) setFormData({ ...formData, category });
+                  }}
                   className="mt-1 w-full rounded-xl border border-slate-200 p-2.5 text-sm bg-white"
                 >
-                  {['Food', 'Study', 'Relaxation', 'Recreation', 'Shopping', 'Essentials', 'Other'].map((cat) => (
+                  {SPOT_CATEGORIES.map((cat) => (
                     <option key={cat} value={cat}>{cat}</option>
                   ))}
                 </select>
@@ -552,7 +730,7 @@ export function AdminDashboard({ isOpen, onClose, onSpotsUpdated }: AdminDashboa
               </div>
               <div className="h-44 w-full rounded-xl border border-slate-300 overflow-hidden shadow-inner">
                 <MapContainer
-                  center={[formData.latitude, formData.longitude]}
+                  center={[BULSU_MENESES_CAMPUS.latitude, BULSU_MENESES_CAMPUS.longitude]}
                   zoom={16}
                   className="h-full w-full"
                 >
@@ -569,7 +747,7 @@ export function AdminDashboard({ isOpen, onClose, onSpotsUpdated }: AdminDashboa
             </div>
 
             {/* Checkbox Amenities */}
-            <div className="flex gap-4 pt-2">
+            <div className="flex flex-wrap gap-x-4 gap-y-2 pt-2">
               <label className="flex items-center gap-1.5 text-xs text-slate-700 cursor-pointer">
                 <input
                   type="checkbox"
@@ -577,7 +755,34 @@ export function AdminDashboard({ isOpen, onClose, onSpotsUpdated }: AdminDashboa
                   onChange={(e) => setFormData({ ...formData, has_outlets: e.target.checked })}
                   className="rounded text-dark-burgundy accent-dark-burgundy"
                 />
-                Has Outlets
+                Outlets
+              </label>
+              <label className="flex items-center gap-1.5 text-xs text-slate-700 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={formData.has_wifi}
+                  onChange={(e) => setFormData({ ...formData, has_wifi: e.target.checked })}
+                  className="rounded text-dark-burgundy accent-dark-burgundy"
+                />
+                Wi-Fi
+              </label>
+              <label className="flex items-center gap-1.5 text-xs text-slate-700 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={formData.has_aircon}
+                  onChange={(e) => setFormData({ ...formData, has_aircon: e.target.checked })}
+                  className="rounded text-dark-burgundy accent-dark-burgundy"
+                />
+                Aircon
+              </label>
+              <label className="flex items-center gap-1.5 text-xs text-slate-700 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={formData.has_restroom}
+                  onChange={(e) => setFormData({ ...formData, has_restroom: e.target.checked })}
+                  className="rounded text-dark-burgundy accent-dark-burgundy"
+                />
+                Restroom
               </label>
               <label className="flex items-center gap-1.5 text-xs text-slate-700 cursor-pointer">
                 <input
@@ -609,6 +814,176 @@ export function AdminDashboard({ isOpen, onClose, onSpotsUpdated }: AdminDashboa
           </form>
         )}
       </main>
+      {editingSpot && editFormData && (
+        <div className="fixed inset-0 z-[2100] flex items-center justify-center bg-black/50 p-3 sm:p-6">
+          <form
+            onSubmit={handleUpdateSpot}
+            className="max-h-full w-full max-w-2xl space-y-4 overflow-y-auto rounded-2xl border border-gold/40 bg-[#FFFCF6] p-4 shadow-2xl sm:p-6"
+            aria-labelledby="edit-pending-spot-title"
+            role="dialog"
+            aria-modal="true"
+          >
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <h2 id="edit-pending-spot-title" className="text-base font-bold text-slate-900">
+                  {editingSpot.approved ? 'Edit active place' : 'Edit contribution'}
+                </h2>
+                <p className="mt-1 text-xs text-slate-600">
+                  {editingSpot.approved
+                    ? 'Changes will be saved directly to this published place.'
+                    : 'Saving edits will not publish this spot. It will remain pending until you approve it.'}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setEditingSpot(null);
+                  setEditFormData(null);
+                }}
+                className="rounded-lg p-2 text-slate-500 hover:bg-slate-100"
+                aria-label="Close edit form"
+              >
+                <X className="h-4 w-4" aria-hidden="true" />
+              </button>
+            </div>
+
+            <div className="grid gap-3 sm:grid-cols-2">
+              <label className="text-xs font-semibold text-slate-700">
+                Place name
+                <input
+                  required
+                  value={editFormData.name}
+                  onChange={(event) => setEditFormData({ ...editFormData, name: event.target.value })}
+                  className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm font-normal"
+                />
+              </label>
+              <label className="text-xs font-semibold text-slate-700">
+                Category
+                <select
+                  value={editFormData.category}
+                  onChange={(event) => {
+                    const category = SPOT_CATEGORIES.find((option) => option === event.target.value);
+                    if (category) setEditFormData({ ...editFormData, category });
+                  }}
+                  className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-normal"
+                >
+                  {SPOT_CATEGORIES.map((category) => (
+                    <option key={category} value={category}>{category}</option>
+                  ))}
+                </select>
+              </label>
+              <label className="text-xs font-semibold text-slate-700 sm:col-span-2">
+                Address / location description
+                <input
+                  value={editFormData.location_description}
+                  onChange={(event) => setEditFormData({ ...editFormData, location_description: event.target.value })}
+                  className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm font-normal"
+                />
+              </label>
+              <label className="text-xs font-semibold text-slate-700">
+                Operating hours
+                <input
+                  required
+                  value={editFormData.hours}
+                  onChange={(event) => setEditFormData({ ...editFormData, hours: event.target.value })}
+                  className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm font-normal"
+                />
+              </label>
+              <label className="text-xs font-semibold text-slate-700">
+                Budget range
+                <input
+                  value={editFormData.budget_range}
+                  onChange={(event) => setEditFormData({ ...editFormData, budget_range: event.target.value })}
+                  className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm font-normal"
+                />
+              </label>
+              <label className="text-xs font-semibold text-slate-700">
+                Latitude
+                <input
+                  required
+                  type="number"
+                  step="any"
+                  min="-90"
+                  max="90"
+                  value={editFormData.latitude}
+                  onChange={(event) => setEditFormData({ ...editFormData, latitude: event.target.value })}
+                  className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm font-normal"
+                />
+              </label>
+              <label className="text-xs font-semibold text-slate-700">
+                Longitude
+                <input
+                  required
+                  type="number"
+                  step="any"
+                  min="-180"
+                  max="180"
+                  value={editFormData.longitude}
+                  onChange={(event) => setEditFormData({ ...editFormData, longitude: event.target.value })}
+                  className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm font-normal"
+                />
+              </label>
+              <label className="text-xs font-semibold text-slate-700 sm:col-span-2">
+                Description / tips
+                <textarea
+                  rows={3}
+                  value={editFormData.description}
+                  onChange={(event) => setEditFormData({ ...editFormData, description: event.target.value })}
+                  className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm font-normal"
+                />
+              </label>
+            </div>
+
+            <fieldset>
+              <legend className="mb-2 text-xs font-semibold text-slate-700">Amenities</legend>
+              <div className="flex flex-wrap gap-x-4 gap-y-2">
+                {([
+                  ['has_outlets', 'Outlets'],
+                  ['has_wifi', 'Wi-Fi'],
+                  ['has_aircon', 'Air-conditioned'],
+                  ['has_restroom', 'Restroom'],
+                  ['is_shaded', 'Shaded'],
+                  ['is_quiet', 'Quiet'],
+                ] as const).map(([field, label]) => (
+                  <label key={field} className="flex items-center gap-1.5 text-xs text-slate-700">
+                    <input
+                      type="checkbox"
+                      checked={editFormData[field]}
+                      onChange={(event) => setEditFormData({ ...editFormData, [field]: event.target.checked })}
+                      className="accent-dark-burgundy"
+                    />
+                    {label}
+                  </label>
+                ))}
+              </div>
+            </fieldset>
+
+            <div className="flex flex-col-reverse justify-end gap-2 border-t border-slate-200 pt-3 sm:flex-row">
+              <button
+                type="button"
+                onClick={() => {
+                  setEditingSpot(null);
+                  setEditFormData(null);
+                }}
+                className="rounded-lg border border-slate-200 px-4 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={isSavingEdit}
+                className="rounded-lg bg-dark-burgundy px-4 py-2 text-xs font-semibold text-white hover:bg-deep-maroon disabled:opacity-60"
+              >
+                {isSavingEdit
+                  ? 'Saving…'
+                  : editingSpot.approved
+                    ? 'Save changes'
+                    : 'Save changes — keep pending'}
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
     </div>
   );
 }

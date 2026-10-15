@@ -10,7 +10,7 @@ import { X, AlertCircle } from 'lucide-react';
 import { BULSU_MENESES_CAMPUS } from '../constants/locations';
 import { supabase } from '../lib/supabase';
 import type { SpotRow } from '../types/database';
-import { calculateDistanceKm } from '../utils/location';
+import { calculateDistanceKm, getWalkingRoute, type WalkingRoute } from '../utils/location';
 import { AdminDashboard } from '../components/AdminDashboard';
 import { ContributeSpotModal } from '../components/ContributeSpotModal';
 
@@ -21,6 +21,10 @@ export default function HomePage() {
   const [isDetailOpen, setIsDetailOpen] = useState(false);
   const [focusRequest, setFocusRequest] = useState(0);
   const [directionsSpotId, setDirectionsSpotId] = useState<string | null>(null);
+  const [walkingRoute, setWalkingRoute] = useState<WalkingRoute | null>(null);
+  const [directionsLoading, setDirectionsLoading] = useState(false);
+  const [directionsError, setDirectionsError] = useState<string | null>(null);
+  const [directionsRetry, setDirectionsRetry] = useState(0);
   const [locations, setLocations] = useState<SpotRow[]>([]);
   const [isLoadingLocations, setIsLoadingLocations] = useState(true);
   const [locationLoadError, setLocationLoadError] = useState<string | null>(null);
@@ -28,6 +32,41 @@ export default function HomePage() {
   const [reloadLocations, setReloadLocations] = useState(0);
   const [isAdminDashboardOpen, setIsAdminDashboardOpen] = useState(false);
   const [isContributeModalOpen, setIsContributeModalOpen] = useState(false);
+
+  useEffect(() => {
+    if (!selectedSpot || directionsSpotId !== selectedSpot.id) {
+      setWalkingRoute(null);
+      setDirectionsLoading(false);
+      setDirectionsError(null);
+      return;
+    }
+
+    const controller = new AbortController();
+    let isCurrentRequest = true;
+    setWalkingRoute(null);
+    setDirectionsLoading(true);
+    setDirectionsError(null);
+
+    getWalkingRoute(selectedSpot, controller.signal)
+      .then((route) => {
+        if (isCurrentRequest) setWalkingRoute(route);
+      })
+      .catch((error: unknown) => {
+        if (isCurrentRequest && !controller.signal.aborted) {
+          setDirectionsError(
+            error instanceof Error ? error.message : 'Unable to load walking directions.',
+          );
+        }
+      })
+      .finally(() => {
+        if (isCurrentRequest) setDirectionsLoading(false);
+      });
+
+    return () => {
+      isCurrentRequest = false;
+      controller.abort();
+    };
+  }, [directionsRetry, directionsSpotId, selectedSpot]);
   
   // Modals & Auth State
   const [activeModal, setActiveModal] = useState<'admin' | 'report' | null>(null);
@@ -227,6 +266,7 @@ export default function HomePage() {
           onViewDetails={handleViewDetails}
           selectedSpotId={selectedSpot?.id ?? null}
           focusRequest={focusRequest}
+          walkingRoute={directionsSpotId === selectedSpot?.id ? walkingRoute : null}
           isFilterOpen={isDesktopFilterOpen}
           onToggleFilter={() => setIsDesktopFilterOpen((isOpen) => !isOpen)}
         />
@@ -242,8 +282,19 @@ export default function HomePage() {
               : null
           }
           directionsRequested={directionsSpotId === selectedSpot?.id}
-          onGetDirections={() => setDirectionsSpotId(selectedSpot?.id ?? null)}
-          onClearDirections={() => setDirectionsSpotId(null)}
+          directionsLoading={directionsLoading}
+          directionsError={directionsError}
+          walkingRoute={walkingRoute}
+          onGetDirections={() => {
+            setDirectionsError(null);
+            setDirectionsSpotId(selectedSpot?.id ?? null);
+          }}
+          onRetryDirections={() => setDirectionsRetry((attempt) => attempt + 1)}
+          onClearDirections={() => {
+            setDirectionsSpotId(null);
+            setWalkingRoute(null);
+            setDirectionsError(null);
+          }}
         />
       </div>
 

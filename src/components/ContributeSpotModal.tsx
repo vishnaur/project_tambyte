@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import { MapPin, Navigation, X, CheckCircle, Map as MapIcon } from 'lucide-react';
 import { MapContainer, TileLayer, Marker, useMapEvents } from 'react-leaflet';
+import { BULSU_MENESES_CAMPUS } from '../constants/locations';
 
 function LocationPicker({ coords, onPick }: { coords: [number, number]; onPick: (lat: number, lng: number) => void }) {
   useMapEvents({
@@ -39,6 +40,10 @@ export function ContributeSpotModal({ isOpen, onClose, onSubmitted }: Contribute
   // Client-side GPS detection
   const [latitude, setLatitude] = useState<number | null>(null);
   const [longitude, setLongitude] = useState<number | null>(null);
+  const [mapSelection, setMapSelection] = useState<[number, number]>([
+    BULSU_MENESES_CAMPUS.latitude,
+    BULSU_MENESES_CAMPUS.longitude,
+  ]);
   const [locationMode, setLocationMode] = useState<'gps' | 'map'>('gps');
   const [isDetectingLocation, setIsDetectingLocation] = useState(false);
   const [locationStatus, setLocationStatus] = useState<string>('Detecting location...');
@@ -57,8 +62,8 @@ export function ContributeSpotModal({ isOpen, onClose, onSubmitted }: Contribute
   function detectCurrentLocation() {
     if (!navigator.geolocation) {
       setLocationStatus('GPS not supported by your browser.');
-      setLatitude(14.7937);
-      setLongitude(120.8735);
+      setLatitude(BULSU_MENESES_CAMPUS.latitude);
+      setLongitude(BULSU_MENESES_CAMPUS.longitude);
       return;
     }
 
@@ -75,9 +80,8 @@ export function ContributeSpotModal({ isOpen, onClose, onSubmitted }: Contribute
       () => {
         setIsDetectingLocation(false);
         setLocationStatus('Could not read GPS. Using campus default.');
-        // Default to Meneses Campus if location permission denied
-        setLatitude(14.7937);
-        setLongitude(120.8735);
+        setLatitude(BULSU_MENESES_CAMPUS.latitude);
+        setLongitude(BULSU_MENESES_CAMPUS.longitude);
       },
       { enableHighAccuracy: true, timeout: 8000 }
     );
@@ -196,7 +200,16 @@ export function ContributeSpotModal({ isOpen, onClose, onSubmitted }: Contribute
                 </button>
                 <button
                   type="button"
-                  onClick={() => setLocationMode('map')}
+                  onClick={() => {
+                    const campusCoordinates: [number, number] = [
+                      BULSU_MENESES_CAMPUS.latitude,
+                      BULSU_MENESES_CAMPUS.longitude,
+                    ];
+                    setLocationMode('map');
+                    setMapSelection(campusCoordinates);
+                    setLatitude(campusCoordinates[0]);
+                    setLongitude(campusCoordinates[1]);
+                  }}
                   className={`flex flex-1 items-center justify-center gap-1.5 rounded-lg py-1.5 transition-all ${
                     locationMode === 'map'
                       ? 'bg-white text-deep-maroon shadow-sm'
@@ -229,11 +242,11 @@ export function ContributeSpotModal({ isOpen, onClose, onSubmitted }: Contribute
               ) : (
                 <div className="space-y-1">
                   <p className="text-[11px] text-slate-500">
-                    Click anywhere on the campus map below to set the spot pin:
+                  Map starts at BulSU Meneses Campus. Click anywhere to set the spot pin:
                   </p>
                   <div className="h-36 w-full rounded-xl border border-slate-300 overflow-hidden shadow-inner">
                     <MapContainer
-                      center={[latitude || 14.7937, longitude || 120.8735]}
+                    center={[BULSU_MENESES_CAMPUS.latitude, BULSU_MENESES_CAMPUS.longitude]}
                       zoom={16}
                       className="h-full w-full"
                     >
@@ -242,8 +255,9 @@ export function ContributeSpotModal({ isOpen, onClose, onSubmitted }: Contribute
                         url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
                       />
                       <LocationPicker
-                        coords={[latitude || 14.7937, longitude || 120.8735]}
+                        coords={mapSelection}
                         onPick={(lat, lng) => {
+                          setMapSelection([lat, lng]);
                           setLatitude(lat);
                           setLongitude(lng);
                         }}
@@ -335,7 +349,7 @@ export function ContributeSpotModal({ isOpen, onClose, onSubmitted }: Contribute
                     onChange={(e) => setHasOutlets(e.target.checked)}
                     className="rounded accent-deep-crimson"
                   />
-                  Has Outlets
+                  Outlets
                 </label>
                 <label className="flex items-center gap-1.5 text-xs text-slate-700 cursor-pointer">
                   <input
