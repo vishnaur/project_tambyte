@@ -1,8 +1,9 @@
-import React, { useEffect, useState } from 'react';
-import { supabase, Spot } from '../lib/supabase';
-import { CheckCircle2, Trash2, Plus, Clock, MapPin, X, AlertTriangle, ArrowLeft, Pencil, ShieldCheck, History } from 'lucide-react';
+import React, { useEffect, useRef, useState } from 'react';
+import { supabase, Spot, uploadSpotImage } from '../lib/supabase';
+import { CheckCircle2, Trash2, Plus, Clock, MapPin, X, AlertTriangle, ArrowLeft, Pencil, ShieldCheck, History, ImagePlus, Filter } from 'lucide-react';
 import { MapContainer, TileLayer, Marker, useMapEvents } from 'react-leaflet';
 import { BULSU_MENESES_CAMPUS } from '../constants/locations';
+import { getOpeningStatus } from '../utils/location';
 
 const SPOT_CATEGORIES: Spot['category'][] = [
   'Food',
@@ -13,6 +14,15 @@ const SPOT_CATEGORIES: Spot['category'][] = [
   'Essentials',
   'Other',
 ];
+
+const AMENITY_FILTERS = [
+  { field: 'has_outlets', label: 'Outlets' },
+  { field: 'has_wifi', label: 'Wi-Fi' },
+  { field: 'has_aircon', label: 'Air conditioning' },
+  { field: 'has_restroom', label: 'Restroom' },
+  { field: 'is_shaded', label: 'Shaded' },
+  { field: 'is_quiet', label: 'Quiet' },
+] as const satisfies ReadonlyArray<{ field: keyof Spot; label: string }>;
 
 function parseReportCoordinates(text?: string | null): { lat: number; lng: number } | null {
   if (!text) return null;
@@ -47,6 +57,7 @@ function createDefaultSpotFormData(): Omit<Spot, 'id' | 'approved' | 'created_at
     has_restroom: false,
     is_shaded: false,
     is_quiet: false,
+    image_url: null,
   };
 }
 
@@ -93,13 +104,42 @@ export function AdminDashboard({ isOpen, onClose, onSpotsUpdated }: AdminDashboa
   const [isSavingEdit, setIsSavingEdit] = useState(false);
   const [actionMessage, setActionMessage] = useState<string | null>(null);
   const [activeSearchQuery, setActiveSearchQuery] = useState('');
+  const [areSpotFiltersOpen, setAreSpotFiltersOpen] = useState(false);
+  const [filterOpenNow, setFilterOpenNow] = useState(false);
+  const [, setOpenStatusRevision] = useState(0);
+  const [selectedAmenityFilters, setSelectedAmenityFilters] = useState<Array<(typeof AMENITY_FILTERS)[number]['field']>>([]);
+  const [budgetFilter, setBudgetFilter] = useState('__all__');
   const [editingSpot, setEditingSpot] = useState<Spot | null>(null);
   const [editFormData, setEditFormData] = useState<SpotEditForm | null>(null);
+  const [newSpotImage, setNewSpotImage] = useState<File | null>(null);
+  const [editSpotImage, setEditSpotImage] = useState<File | null>(null);
+  const editSpotImageInputRef = useRef<HTMLInputElement>(null);
+  const [editSpotImagePreview, setEditSpotImagePreview] = useState<string | null>(null);
   const [spotToDelete, setSpotToDelete] = useState<{ id: string; name: string } | null>(null);
   const [resolvingReportId, setResolvingReportId] = useState<string | null>(null);
 
   // Form state for adding a verified spot directly
   const [formData, setFormData] = useState(createDefaultSpotFormData);
+
+  useEffect(() => {
+    if (!editSpotImage) {
+      setEditSpotImagePreview(null);
+      return;
+    }
+
+    const previewUrl = URL.createObjectURL(editSpotImage);
+    setEditSpotImagePreview(previewUrl);
+    return () => URL.revokeObjectURL(previewUrl);
+  }, [editSpotImage]);
+
+  useEffect(() => {
+    if (!filterOpenNow) return;
+
+    const intervalId = window.setInterval(() => {
+      setOpenStatusRevision((revision) => revision + 1);
+    }, 60_000);
+    return () => window.clearInterval(intervalId);
+  }, [filterOpenNow]);
 
   useEffect(() => {
     if (isOpen) {
@@ -203,6 +243,7 @@ export function AdminDashboard({ isOpen, onClose, onSpotsUpdated }: AdminDashboa
 
   function openEditSpot(spot: Spot) {
     setEditingSpot(spot);
+    setEditSpotImage(null);
     setEditFormData({
       name: spot.name,
       category: spot.category,
@@ -244,6 +285,17 @@ export function AdminDashboard({ isOpen, onClose, onSpotsUpdated }: AdminDashboa
     }
 
     setIsSavingEdit(true);
+    let imageUrl = editingSpot.image_url ?? null;
+    try {
+      if (editSpotImage) {
+        imageUrl = await uploadSpotImage(editSpotImage);
+      }
+    } catch (error) {
+      setIsSavingEdit(false);
+      setActionMessage(error instanceof Error ? error.message : 'Unable to upload image.');
+      return;
+    }
+
     const { data, error } = await supabase
       .from('spots')
       .update({
@@ -261,6 +313,7 @@ export function AdminDashboard({ isOpen, onClose, onSpotsUpdated }: AdminDashboa
         has_restroom: editFormData.has_restroom,
         is_shaded: editFormData.is_shaded,
         is_quiet: editFormData.is_quiet,
+        image_url: imageUrl,
         approved: editingSpot.approved,
         admin_edited: true,
         ...(!editingSpot.approved && {
@@ -282,6 +335,7 @@ export function AdminDashboard({ isOpen, onClose, onSpotsUpdated }: AdminDashboa
       setActionMessage('This submission is no longer pending. Refresh the dashboard and try again.');
       setEditingSpot(null);
       setEditFormData(null);
+      setEditSpotImage(null);
       await loadSpots();
       return;
     }
@@ -342,6 +396,7 @@ export function AdminDashboard({ isOpen, onClose, onSpotsUpdated }: AdminDashboa
 
     setEditingSpot(null);
     setEditFormData(null);
+    setEditSpotImage(null);
     setActionMessage(
       editingSpot.approved
         ? 'Active place updated successfully.'
@@ -385,25 +440,52 @@ export function AdminDashboard({ isOpen, onClose, onSpotsUpdated }: AdminDashboa
     e.preventDefault();
     setLoading(true);
 
-    const { error } = await supabase.from('spots').insert([
-      {
-        ...formData,
-        approved: true, // Directly approved since admin created it
-      },
-    ]);
+    try {
+      const imageUrl = newSpotImage ? await uploadSpotImage(newSpotImage) : null;
+      const { error } = await supabase.from('spots').insert([
+        {
+          ...formData,
+          image_url: imageUrl,
+          approved: true,
+        },
+      ]);
+      if (error) throw error;
 
-    setLoading(false);
-    if (error) {
-      setActionMessage(`Unable to add spot: ${error.message}`);
-      return;
+      setActionMessage('New spot added directly to map!');
+      setFormData(createDefaultSpotFormData());
+      setNewSpotImage(null);
+      setActiveTab('approved');
+      await loadSpots();
+      onSpotsUpdated();
+    } catch (error) {
+      setActionMessage(error instanceof Error ? `Unable to add spot: ${error.message}` : 'Unable to add spot.');
+    } finally {
+      setLoading(false);
     }
-
-    setActionMessage('New spot added directly to map!');
-    setFormData(createDefaultSpotFormData());
-    setActiveTab('approved');
-    await loadSpots();
-    onSpotsUpdated();
   }
+
+  const budgetOptions = [...new Set(
+    approvedSpots
+      .map((spot) => spot.budget_range?.trim())
+      .filter((budget): budget is string => Boolean(budget)),
+  )].sort((first, second) => first.localeCompare(second));
+  const filteredApprovedSpots = approvedSpots.filter((spot) => {
+    const query = activeSearchQuery.trim().toLowerCase();
+    const matchesSearch =
+      !query ||
+      spot.name.toLowerCase().includes(query) ||
+      spot.category.toLowerCase().includes(query);
+    const matchesOpenStatus = !filterOpenNow || getOpeningStatus(spot.hours) === 'open';
+    const matchesAmenities = selectedAmenityFilters.every((field) => Boolean(spot[field]));
+    const budget = spot.budget_range?.trim() ?? '';
+    const matchesBudget =
+      budgetFilter === '__all__' ||
+      (budgetFilter === '__none__' ? !budget : budget === budgetFilter);
+
+    return matchesSearch && matchesOpenStatus && matchesAmenities && matchesBudget;
+  });
+  const hasActiveSpotFilters =
+    filterOpenNow || selectedAmenityFilters.length > 0 || budgetFilter !== '__all__';
 
   if (!isOpen) return null;
 
@@ -542,6 +624,13 @@ export function AdminDashboard({ isOpen, onClose, onSpotsUpdated }: AdminDashboa
                       }`}
                     >
                       <div className="space-y-3">
+                        {spot.image_url && (
+                          <img
+                            src={spot.image_url}
+                            alt={`Photo submitted for ${spot.name}`}
+                            className="h-36 w-full rounded-xl object-cover"
+                          />
+                        )}
                         {/* Duplicate Alert Banner */}
                         {duplicateMatch && (
                           <div className="flex items-center gap-1.5 rounded-xl bg-amber-50 p-2 text-xs font-semibold text-amber-800 border border-amber-200">
@@ -667,33 +756,115 @@ export function AdminDashboard({ isOpen, onClose, onSpotsUpdated }: AdminDashboa
         ) : activeTab === 'approved' ? (
           /* TAB 2: CURRENT ACTIVE SPOTS */
           <div className="space-y-4">
-            {/* Tab Header with Search */}
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-200">
-              <div>
-                <h2 className="text-base font-bold text-slate-900">
-                  Published Campus Places ({approvedSpots.length})
-                </h2>
-                <p className="text-xs text-slate-500">
-                  Spots currently visible to all students on the live map.
-                </p>
+            {/* Tab Header with Search and Filters */}
+            <div className="space-y-3 border-b border-slate-200 pb-3">
+              <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
+                <div>
+                  <h2 className="text-base font-bold text-slate-900">
+                    Published Campus Places ({filteredApprovedSpots.length} of {approvedSpots.length})
+                  </h2>
+                  <p className="text-xs text-slate-500">
+                    Spots currently visible to all students on the live map.
+                  </p>
+                </div>
+                <div className="flex w-full items-center gap-2 sm:w-auto">
+                  <input
+                    type="text"
+                    placeholder="Search active spots..."
+                    value={activeSearchQuery}
+                    onChange={(e) => setActiveSearchQuery(e.target.value)}
+                    className="min-w-0 flex-1 rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-800 focus:border-dark-burgundy focus:outline-none focus:ring-1 focus:ring-dark-burgundy/30 sm:w-64 sm:flex-none"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setAreSpotFiltersOpen((open) => !open)}
+                    aria-expanded={areSpotFiltersOpen}
+                    aria-controls="active-spot-filters"
+                    className={`inline-flex shrink-0 items-center gap-1.5 rounded-xl border px-3 py-1.5 text-xs font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-dark-burgundy ${
+                      areSpotFiltersOpen || hasActiveSpotFilters
+                        ? 'border-dark-burgundy bg-dark-burgundy text-white'
+                        : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
+                    }`}
+                  >
+                    <Filter className="h-3.5 w-3.5" aria-hidden="true" />
+                    Filters
+                    {hasActiveSpotFilters && (
+                      <span className="flex h-4 min-w-4 items-center justify-center rounded-full bg-white px-1 text-[10px] font-bold text-dark-burgundy">
+                        {Number(filterOpenNow) + selectedAmenityFilters.length + Number(budgetFilter !== '__all__')}
+                      </span>
+                    )}
+                  </button>
+                </div>
               </div>
-              <input
-                type="text"
-                placeholder="Search active spots..."
-                value={activeSearchQuery}
-                onChange={(e) => setActiveSearchQuery(e.target.value)}
-                className="w-full sm:w-64 rounded-xl border border-slate-200 px-3 py-1.5 text-xs text-slate-800 focus:border-dark-burgundy focus:outline-none focus:ring-1 focus:ring-dark-burgundy/30 bg-white"
-              />
+              {areSpotFiltersOpen && (
+              <div id="active-spot-filters" className="flex flex-wrap items-center gap-x-5 gap-y-3 pt-1">
+                <label className="flex items-center gap-2 text-xs font-medium text-slate-700">
+                  <input
+                    type="checkbox"
+                    checked={filterOpenNow}
+                    onChange={(event) => setFilterOpenNow(event.target.checked)}
+                    className="accent-dark-burgundy"
+                  />
+                  Open now
+                </label>
+                <label className="flex items-center gap-2 text-xs font-medium text-slate-700">
+                  Budget
+                  <select
+                    value={budgetFilter}
+                    onChange={(event) => setBudgetFilter(event.target.value)}
+                    className="rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-xs"
+                  >
+                    <option value="__all__">Any budget</option>
+                    <option value="__none__">No budget listed</option>
+                    {budgetOptions.map((budget) => (
+                      <option key={budget} value={budget}>{budget}</option>
+                    ))}
+                  </select>
+                </label>
+                <fieldset className="flex flex-wrap items-center gap-x-3 gap-y-2">
+                  <legend className="sr-only">Filter by amenities</legend>
+                  {AMENITY_FILTERS.map(({ field, label }) => (
+                    <label key={field} className="flex items-center gap-1.5 text-xs text-slate-700">
+                      <input
+                        type="checkbox"
+                        checked={selectedAmenityFilters.includes(field)}
+                        onChange={(event) =>
+                          setSelectedAmenityFilters((selected) =>
+                            event.target.checked
+                              ? [...selected, field]
+                              : selected.filter((amenity) => amenity !== field),
+                          )
+                        }
+                        className="accent-dark-burgundy"
+                      />
+                      {label}
+                    </label>
+                  ))}
+                </fieldset>
+                {hasActiveSpotFilters && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setFilterOpenNow(false);
+                      setSelectedAmenityFilters([]);
+                      setBudgetFilter('__all__');
+                    }}
+                    className="text-xs font-semibold text-dark-burgundy underline underline-offset-2"
+                  >
+                    Clear filters
+                  </button>
+                )}
+              </div>
+              )}
             </div>
 
             {/* 3-Column Responsive Grid */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {approvedSpots
-                .filter((spot) =>
-                  spot.name.toLowerCase().includes(activeSearchQuery.toLowerCase()) ||
-                  spot.category.toLowerCase().includes(activeSearchQuery.toLowerCase())
-                )
-                .map((spot: any) => (
+              {filteredApprovedSpots.length === 0 ? (
+                <p className="rounded-xl border border-dashed border-slate-300 p-6 text-center text-xs text-slate-500 md:col-span-2 lg:col-span-3">
+                  No active spots match these search and filter settings.
+                </p>
+              ) : filteredApprovedSpots.map((spot: any) => (
                   <div
                     key={spot.id}
                     className="admin-card flex flex-col justify-between rounded-2xl border p-4 shadow-sm transition-all hover:shadow-md"
@@ -822,6 +993,21 @@ export function AdminDashboard({ isOpen, onClose, onSpotsUpdated }: AdminDashboa
                 placeholder="e.g., College of Engineering Gazebo"
                 className="mt-1 w-full rounded-xl border border-slate-200 p-2.5 text-sm"
               />
+            </div>
+
+            <div>
+              <label htmlFor="admin-new-spot-image" className="block text-xs font-semibold text-slate-700">
+                Spot photo (optional)
+              </label>
+              <input
+                id="admin-new-spot-image"
+                type="file"
+                accept="image/jpeg,image/png,image/webp"
+                onChange={(event) => setNewSpotImage(event.target.files?.[0] ?? null)}
+                className="mt-1 w-full rounded-xl border border-slate-200 p-2.5 text-xs"
+              />
+              <p className="mt-1 text-[11px] text-slate-500">JPEG, PNG, or WebP, up to 5 MB.</p>
+              {newSpotImage && <p className="mt-1 truncate text-[11px] text-slate-600">{newSpotImage.name}</p>}
             </div>
 
             <div className="grid grid-cols-2 gap-4">
@@ -1283,6 +1469,38 @@ export function AdminDashboard({ isOpen, onClose, onSpotsUpdated }: AdminDashboa
                   className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm font-normal"
                 />
               </label>
+              <div className="text-xs font-semibold text-slate-700 sm:col-span-2">
+                <label htmlFor="admin-edit-spot-image">
+                  Spot photo
+                </label>
+                {(editSpotImagePreview || editingSpot.image_url) && (
+                  <img
+                    src={editSpotImagePreview ?? editingSpot.image_url ?? ''}
+                    alt={`${editSpotImage ? 'Selected' : 'Current'} photo for ${editingSpot.name}`}
+                    className="mt-2 h-32 w-full rounded-xl object-cover"
+                  />
+                )}
+                <input
+                  ref={editSpotImageInputRef}
+                  id="admin-edit-spot-image"
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp"
+                  onChange={(event) => setEditSpotImage(event.target.files?.[0] ?? null)}
+                  className="sr-only"
+                />
+                <button
+                  type="button"
+                  onClick={() => editSpotImageInputRef.current?.click()}
+                  className="mt-2 inline-flex min-h-10 items-center gap-2 rounded-lg border border-gold/50 bg-gold/10 px-3 py-2 text-xs font-semibold text-dark-burgundy transition-colors hover:bg-gold/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-dark-burgundy"
+                >
+                  <ImagePlus className="h-4 w-4" aria-hidden="true" />
+                  {editingSpot.image_url ? 'Choose placeholder image' : 'Attach placeholder image'}
+                </button>
+                <p className="mt-1 text-[11px] font-normal text-slate-500">
+                  Optional. JPEG, PNG, or WebP, up to 5 MB. Save changes to use it in the spot details.
+                </p>
+                {editSpotImage && <p className="mt-1 truncate text-[11px] font-normal text-slate-600">{editSpotImage.name}</p>}
+              </div>
             </div>
 
             <fieldset>
@@ -1315,6 +1533,7 @@ export function AdminDashboard({ isOpen, onClose, onSpotsUpdated }: AdminDashboa
                 onClick={() => {
                   setEditingSpot(null);
                   setEditFormData(null);
+                  setEditSpotImage(null);
                   setResolvingReportId(null);
                 }}
                 className="rounded-lg border border-slate-200 px-4 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50"

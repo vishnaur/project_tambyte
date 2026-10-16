@@ -18,6 +18,12 @@ export interface SpotRow {
   operating_hours: Json | null;
   noise_level: string | null;
   outlets_available: boolean | null;
+  has_outlets: boolean;
+  has_wifi: boolean;
+  has_aircon: boolean;
+  has_restroom: boolean;
+  is_shaded: boolean;
+  is_quiet: boolean;
   image_url: string | null;
   is_active: boolean;
   created_at: string;

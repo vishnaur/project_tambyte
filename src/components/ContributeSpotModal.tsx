@@ -1,6 +1,6 @@
-import React, { useState, useEffect } from 'react';
-import { supabase } from '../lib/supabase';
-import { MapPin, Navigation, X, CheckCircle, Map as MapIcon } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import { supabase, uploadSpotImage } from '../lib/supabase';
+import { MapPin, Navigation, X, CheckCircle, Map as MapIcon, ImagePlus } from 'lucide-react';
 import { MapContainer, TileLayer, Marker, useMapEvents } from 'react-leaflet';
 import { BULSU_MENESES_CAMPUS } from '../constants/locations';
 
@@ -20,6 +20,7 @@ interface ContributeSpotModalProps {
 }
 
 export function ContributeSpotModal({ isOpen, onClose, onSubmitted }: ContributeSpotModalProps) {
+  const imageInputRef = useRef<HTMLInputElement>(null);
   const [name, setName] = useState('');
   const [category, setCategory] = useState<'Food' | 'Study' | 'Relaxation' | 'Recreation' | 'Shopping' | 'Essentials' | 'Other'>('Food');
   const [description, setDescription] = useState('');
@@ -28,6 +29,8 @@ export function ContributeSpotModal({ isOpen, onClose, onSubmitted }: Contribute
   const [openTime, setOpenTime] = useState('08:00:00');
   const [closeTime, setCloseTime] = useState('17:00:00');
   const [budgetRange, setBudgetRange] = useState('Php 50 - 100');
+  const [imageFile, setImageFile] = useState<File | null>(null);
+  const [imagePreviewUrl, setImagePreviewUrl] = useState<string | null>(null);
 
   // Amenities
   const [hasOutlets, setHasOutlets] = useState(false);
@@ -50,6 +53,17 @@ export function ContributeSpotModal({ isOpen, onClose, onSubmitted }: Contribute
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
+
+  useEffect(() => {
+    if (!imageFile) {
+      setImagePreviewUrl(null);
+      return;
+    }
+
+    const previewUrl = URL.createObjectURL(imageFile);
+    setImagePreviewUrl(previewUrl);
+    return () => URL.revokeObjectURL(previewUrl);
+  }, [imageFile]);
 
   useEffect(() => {
     if (isOpen) {
@@ -110,7 +124,9 @@ export function ContributeSpotModal({ isOpen, onClose, onSubmitted }: Contribute
         return;
       }
 
-      // Submits to Supabase with approved = false (Visitor submission)
+      const imageUrl = imageFile ? await uploadSpotImage(imageFile) : null;
+
+      // Visitor submissions, including their photos, remain hidden until approved.
       const { error } = await supabase.from('spots').insert([
         {
           name,
@@ -129,16 +145,19 @@ export function ContributeSpotModal({ isOpen, onClose, onSubmitted }: Contribute
           has_wifi: hasWifi,
           has_aircon: hasAircon,
           has_restroom: hasRestroom,
+          image_url: imageUrl,
           approved: false,
         },
       ]);
 
       if (error) throw error;
 
+      setImageFile(null);
+      if (imageInputRef.current) imageInputRef.current.value = '';
       setIsSuccess(true);
       onSubmitted();
-    } catch (err: any) {
-      alert(err.message || 'Error submitting spot.');
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Error submitting spot.');
     } finally {
       setIsSubmitting(false);
     }
@@ -280,6 +299,54 @@ export function ContributeSpotModal({ isOpen, onClose, onSubmitted }: Contribute
                 placeholder="e.g. IT Building Study Nook"
                 className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm text-slate-800 focus:border-emerald-600 focus:outline-none focus:ring-1 focus:ring-emerald-600"
               />
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-slate-700">
+                Spot display image (optional)
+              </label>
+              <input
+                ref={imageInputRef}
+                id="contribution-spot-image"
+                type="file"
+                accept="image/jpeg,image/png,image/webp"
+                onChange={(event) => {
+                  setImageFile(event.target.files?.[0] ?? null);
+                }}
+                className="sr-only"
+              />
+              <button
+                type="button"
+                onClick={() => imageInputRef.current?.click()}
+                className="mt-2 inline-flex min-h-10 items-center gap-2 rounded-xl border border-gold/50 bg-gold/10 px-3 py-2 text-xs font-semibold text-dark-burgundy transition-colors hover:bg-gold/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-dark-burgundy"
+              >
+                <ImagePlus className="h-4 w-4" aria-hidden="true" />
+                {imageFile ? 'Change image' : 'Add spot image'}
+              </button>
+              <p className="mt-1 text-[11px] text-slate-500">
+                JPEG, PNG, or WebP, up to 5 MB. An admin must approve your image before it appears on the spot.
+              </p>
+              {imageFile && (
+                <div className="mt-2 flex items-center gap-3 rounded-xl border border-slate-200 bg-white p-2">
+                  <img
+                    src={imagePreviewUrl ?? ''}
+                    alt="Preview of selected spot image"
+                    className="h-14 w-20 rounded-lg object-cover"
+                  />
+                  <span className="min-w-0 flex-1 truncate text-xs text-slate-600">{imageFile.name}</span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setImageFile(null);
+                      if (imageInputRef.current) imageInputRef.current.value = '';
+                    }}
+                    className="rounded-lg px-2 py-1 text-xs font-semibold text-rose-700 hover:bg-rose-50"
+                    aria-label="Remove selected spot image"
+                  >
+                    Remove
+                  </button>
+                </div>
+              )}
             </div>
 
             {/* Category and Budget */}

@@ -72,6 +72,40 @@
   background: #460b12;
 }
 
+.tambyte-spot-marker-open span {
+  position: relative;
+}
+
+.tambyte-spot-marker-open span::before {
+  position: absolute;
+  inset: -9px;
+  border: 2.5px solid rgb(230 141 7 / 85%);
+  border-radius: inherit;
+  box-shadow: 0 0 6px rgb(230 141 7 / 45%);
+  content: '';
+  pointer-events: none;
+  animation: tambyte-open-marker-pulse 2.8s ease-out infinite;
+}
+
+@keyframes tambyte-open-marker-pulse {
+  0% {
+    opacity: 0.9;
+    transform: scale(0.8);
+  }
+
+  75%,
+  100% {
+    opacity: 0;
+    transform: scale(1.75);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tambyte-spot-marker-open span::before {
+    animation: none;
+  }
+}
+
 .tambyte-spot-marker-selected {
   background: #970023;
   outline: 3px solid rgb(230 141 7 / 50%);

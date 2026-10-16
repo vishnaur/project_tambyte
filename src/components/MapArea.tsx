@@ -17,6 +17,7 @@ import {
   PanelLeftClose,
   PanelLeftOpen,
   Plus,
+  Minus,
   Navigation,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
@@ -34,10 +35,10 @@ const userLocationIcon = L.divIcon({
   iconAnchor: [11, 11],
 });
 import { useEffect, useRef, useState } from 'react';
-import { MapContainer, Marker, Popup, TileLayer, ZoomControl, Circle, Polyline, useMap } from 'react-leaflet';
+import { MapContainer, Marker, Popup, TileLayer, Circle, Polyline, useMap } from 'react-leaflet';
 import { BULSU_MENESES_CAMPUS } from '../constants/locations';
 import type { SpotRow } from '../types/database';
-import type { WalkingRoute } from '../utils/location';
+import { getOpeningStatus, type WalkingRoute } from '../utils/location';
 
 interface CampusWeather {
   temperature: number;
@@ -313,7 +314,6 @@ interface MapAreaProps {
   walkingRoute: WalkingRoute | null;
   locations: readonly SpotRow[];
   totalLocationCount: number;
-  invalidCoordinateCount: number;
   isLoading: boolean;
   loadError: string | null;
   onLocateLocation: (location: SpotRow) => void;
@@ -322,7 +322,6 @@ interface MapAreaProps {
   isFilterOpen: boolean;
   onToggleFilter: () => void;
   onShareSpotClick?: () => void;
-  onReportSpotClick?: (location: SpotRow) => void;
   onGetDirections?: (location: SpotRow) => void;
 }
 
@@ -337,6 +336,57 @@ function MapResizeHandler() {
 
     observer.observe(container);
     return () => observer.disconnect();
+  }, [map]);
+
+  return null;
+}
+
+function KeepOpenPopupVisible() {
+  const map = useMap();
+
+  useEffect(() => {
+    let firstFrame = 0;
+    let secondFrame = 0;
+
+    const keepPopupVisible = () => {
+      window.cancelAnimationFrame(firstFrame);
+      window.cancelAnimationFrame(secondFrame);
+      firstFrame = window.requestAnimationFrame(() => {
+        secondFrame = window.requestAnimationFrame(() => {
+          const popup = map.getContainer().querySelector<HTMLElement>('.leaflet-popup');
+          if (!popup) return;
+
+          const mapBounds = map.getContainer().getBoundingClientRect();
+          const popupBounds = popup.getBoundingClientRect();
+          const padding = 16;
+          let visualShiftX = 0;
+          let visualShiftY = 0;
+
+          if (popupBounds.left < mapBounds.left + padding) {
+            visualShiftX = mapBounds.left + padding - popupBounds.left;
+          } else if (popupBounds.right > mapBounds.right - padding) {
+            visualShiftX = mapBounds.right - padding - popupBounds.right;
+          }
+
+          if (popupBounds.top < mapBounds.top + padding) {
+            visualShiftY = mapBounds.top + padding - popupBounds.top;
+          } else if (popupBounds.bottom > mapBounds.bottom - padding) {
+            visualShiftY = mapBounds.bottom - padding - popupBounds.bottom;
+          }
+
+          if (visualShiftX || visualShiftY) {
+            map.panBy([-visualShiftX, -visualShiftY], { animate: false });
+          }
+        });
+      });
+    };
+
+    map.on('popupopen zoomend', keepPopupVisible);
+    return () => {
+      map.off('popupopen zoomend', keepPopupVisible);
+      window.cancelAnimationFrame(firstFrame);
+      window.cancelAnimationFrame(secondFrame);
+    };
   }, [map]);
 
   return null;
@@ -378,11 +428,29 @@ function FocusSelectedSpot({
     const marker = markerRefs.current.get(selectedSpotId);
     if (!marker) return;
 
-    map.flyTo(marker.getLatLng(), Math.max(map.getZoom(), 17), {
+    const target = marker.getLatLng();
+    const targetZoom = Math.max(map.getZoom(), 17);
+    const mapAlreadyFocused =
+      map.getCenter().distanceTo(target) < 1 && map.getZoom() === targetZoom;
+    const openPopupAfterMove = () => {
+      marker.openPopup();
+    };
+
+    marker.closePopup();
+    if (mapAlreadyFocused) {
+      openPopupAfterMove();
+      return;
+    }
+
+    map.once('moveend', openPopupAfterMove);
+    map.flyTo(target, targetZoom, {
       animate: true,
       duration: 0.6,
     });
-    marker.openPopup();
+
+    return () => {
+      map.off('moveend', openPopupAfterMove);
+    };
   }, [map, markerRefs, selectedSpotId, focusRequest]);
 
   return null;
@@ -393,13 +461,21 @@ const BULSU_MENESES_COORDINATES: [number, number] = [
   BULSU_MENESES_CAMPUS.longitude,
 ];
 
-// 1.2 km (1,200m) Realistic Walking Tambay Zone
-const CAMPUS_RADIUS_METERS = 1200;
-
-// Snug boundary matching the 1.2km zone
+// Keep the map within a 1.75 km radius so nearby cafes remain reachable.
+const CAMPUS_RADIUS_METERS = 1750;
+const CAMPUS_LATITUDE_OFFSET = CAMPUS_RADIUS_METERS / 111_320;
+const CAMPUS_LONGITUDE_OFFSET =
+  CAMPUS_RADIUS_METERS /
+  (111_320 * Math.cos((BULSU_MENESES_CAMPUS.latitude * Math.PI) / 180));
 const CAMPUS_VICINITY_BOUNDS: L.LatLngBoundsExpression = [
-  [BULSU_MENESES_CAMPUS.latitude - 0.012, BULSU_MENESES_CAMPUS.longitude - 0.013], // Southwest
-  [BULSU_MENESES_CAMPUS.latitude + 0.012, BULSU_MENESES_CAMPUS.longitude + 0.013], // Northeast
+  [
+    BULSU_MENESES_CAMPUS.latitude - CAMPUS_LATITUDE_OFFSET,
+    BULSU_MENESES_CAMPUS.longitude - CAMPUS_LONGITUDE_OFFSET,
+  ],
+  [
+    BULSU_MENESES_CAMPUS.latitude + CAMPUS_LATITUDE_OFFSET,
+    BULSU_MENESES_CAMPUS.longitude + CAMPUS_LONGITUDE_OFFSET,
+  ],
 ];
 
 // Put this right here! (Restoring the missing campusIcon)
@@ -410,9 +486,9 @@ const campusIcon = L.divIcon({
   iconAnchor: [12, 12],
 });
 
-function createSpotIcon(isSelected: boolean) {
+function createSpotIcon(isSelected: boolean, isOpen: boolean) {
   return L.divIcon({
-    className: `tambyte-spot-marker${isSelected ? ' tambyte-spot-marker-selected' : ''}`,
+    className: `tambyte-spot-marker${isOpen ? ' tambyte-spot-marker-open' : ''}${isSelected ? ' tambyte-spot-marker-selected' : ''}`,
     html: '<span aria-hidden="true"></span>',
     iconSize: [20, 20],
     iconAnchor: [10, 10],
@@ -436,7 +512,6 @@ export function MapArea({
   walkingRoute,
   locations,
   totalLocationCount,
-  invalidCoordinateCount,
   isLoading,
   loadError,
   onLocateLocation,
@@ -445,13 +520,21 @@ export function MapArea({
   isFilterOpen,
   onToggleFilter,
   onShareSpotClick,
-  onReportSpotClick,
   onGetDirections,
 }: MapAreaProps) {
   const validLocations = locations.filter(hasValidCoordinates);
   const markerRefs = useRef(new Map<string, L.Marker>());
   const [userLocation, setUserLocation] = useState<[number, number] | null>(null);
+  const [, setOpeningClockTick] = useState(0);
   const mapRef = useRef<L.Map | null>(null);
+
+  useEffect(() => {
+    const intervalId = window.setInterval(() => {
+      setOpeningClockTick((tick) => tick + 1);
+    }, 60_000);
+
+    return () => window.clearInterval(intervalId);
+  }, []);
 
   // Flies camera to current user location when button is tapped
   const handleLocateMe = () => {
@@ -512,12 +595,14 @@ export function MapArea({
           maxZoom={18}
           maxBounds={CAMPUS_VICINITY_BOUNDS}
           maxBoundsViscosity={0.8}
+          closePopupOnClick
           scrollWheelZoom
           zoomControl={false}
           className="h-full min-h-[420px] w-full sm:min-h-[500px]"
           aria-label={`Map centered on ${BULSU_MENESES_CAMPUS.name}`}
         >
           <MapResizeHandler />
+          <KeepOpenPopupVisible />
           <FocusSelectedSpot
             selectedSpotId={selectedSpotId}
             focusRequest={focusRequest}
@@ -525,7 +610,6 @@ export function MapArea({
           />
           <FitWalkingRoute route={walkingRoute} />
           <CampusWeatherBadge />
-          <ZoomControl position="topright" />
           <TileLayer
             attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
             url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
@@ -570,14 +654,27 @@ export function MapArea({
                 }
               }}
               position={[location.latitude, location.longitude]}
-              icon={createSpotIcon(selectedSpotId === location.id)}
+              icon={createSpotIcon(
+                selectedSpotId === location.id,
+                getOpeningStatus(location.hours) === 'open',
+              )}
               eventHandlers={{
                 click: () => onLocateLocation(location),
               }}
             >
-              <Popup>
-                <div className="p-1 space-y-2.5 min-w-[170px]">
-                  <div>
+              <Popup autoPanPadding={[24, 56]} closeOnClick>
+                <div className="relative isolate min-w-[170px] space-y-2.5 overflow-hidden rounded-lg p-1">
+                  {location.image_url && (
+                    <div className="pointer-events-none absolute -inset-x-1 -top-1 z-0 h-32 overflow-hidden" aria-hidden="true">
+                      <img
+                        src={location.image_url}
+                        alt=""
+                        className="h-full w-full object-cover opacity-85"
+                      />
+                      <div className="absolute inset-0 bg-gradient-to-b from-white/0 via-white/10 to-white" />
+                    </div>
+                  )}
+                  <div className="relative z-10">
                     <strong className="text-sm font-bold text-slate-900 block leading-tight">{location.name}</strong>
                     {location.category && (
                       <span className="inline-block rounded bg-gold/25 px-2 py-0.5 text-[10px] font-bold text-deep-maroon mt-1">
@@ -585,12 +682,14 @@ export function MapArea({
                       </span>
                     )}
                     {location.location_description && (
-                      <p className="text-[11px] text-slate-500 mt-1">{location.location_description}</p>
+                      <p className="mt-1.5 border-l-2 border-gold/80 pl-2 text-[11px] text-slate-700">
+                        {location.location_description}
+                      </p>
                     )}
                   </div>
 
                   {/* Action Buttons Hub */}
-                  <div className="flex flex-col gap-1.5 pt-2 border-t border-slate-100">
+                  <div className="relative z-10 flex flex-col gap-1.5 border-t border-slate-100 pt-2">
                     <button
                       type="button"
                       onClick={() => onViewDetails(location)}
@@ -604,13 +703,6 @@ export function MapArea({
                       className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-100 transition-colors text-center"
                     >
                       Get Directions
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => onReportSpotClick?.(location)}
-                      className="w-full rounded-xl border border-rose-200 bg-rose-50/60 px-3.5 py-1.5 text-xs font-semibold text-rose-700 hover:bg-rose-100 transition-colors text-center"
-                    >
-                      Report Issue
                     </button>
                   </div>
                 </div>
@@ -646,6 +738,28 @@ export function MapArea({
             <Navigation className="h-4 w-4 fill-blue-600 text-blue-600 -rotate-45" />
           </button>
 
+          <div className="flex flex-col overflow-hidden rounded-xl border border-slate-200 bg-white text-slate-700 shadow-md">
+            <button
+              type="button"
+              onClick={() => mapRef.current?.zoomIn()}
+              className="flex h-9 w-10 items-center justify-center transition-colors hover:bg-warm-cream focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-dark-burgundy"
+              title="Zoom in"
+              aria-label="Zoom in"
+            >
+              <Plus className="h-5 w-5" aria-hidden="true" />
+            </button>
+            <div className="mx-2 border-t border-slate-200" />
+            <button
+              type="button"
+              onClick={() => mapRef.current?.zoomOut()}
+              className="flex h-9 w-10 items-center justify-center transition-colors hover:bg-warm-cream focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-dark-burgundy"
+              title="Zoom out"
+              aria-label="Zoom out"
+            >
+              <Minus className="h-5 w-5" aria-hidden="true" />
+            </button>
+          </div>
+
           {/* Share Spot Button */}
           <button
             type="button"
@@ -667,39 +781,30 @@ export function MapArea({
         </div>
       </div>
 
-      <div className="rounded-xl border border-slate-200 bg-white px-3 py-2.5 shadow-sm sm:px-4">
-        {loadError ? (
-          <div className="flex flex-wrap items-center justify-between gap-2" role="alert">
-            <p className="text-xs text-rose-700">
-              Unable to load places. {loadError}
-            </p>
-            <button
-              type="button"
-              onClick={onRetry}
-              className="min-h-9 rounded-lg border border-slate-200 px-3 text-xs font-semibold text-slate-700 hover:bg-slate-50"
-            >
-              Retry
-            </button>
-          </div>
-        ) : isLoading ? (
-          <p className="text-xs text-slate-600" role="status">          Finding places...</p>
-        ) : validLocations.length ? (
-          <p className="text-xs text-slate-600">
-            {validLocations.length} location{validLocations.length === 1 ? '' : 's'} shown on map
-            {invalidCoordinateCount > 0 &&
-              ` · ${invalidCoordinateCount} location${invalidCoordinateCount === 1 ? '' : 's'} excluded because coordinates are missing or invalid`}
-          </p>
-        ) : totalLocationCount === 0 ? (
-          <p className="text-xs text-slate-600">No places found.</p>
-        ) : invalidCoordinateCount > 0 ? (
-          <p className="text-xs text-amber-700">
-            No mappable locations. {invalidCoordinateCount} location
-            {invalidCoordinateCount === 1 ? ' is' : 's are'} missing valid coordinates.
-          </p>
-        ) : (
-          <p className="text-xs text-slate-600">No places found in this category.</p>
-        )}
-      </div>
+      {(loadError || isLoading || validLocations.length === 0) && (
+        <div className="rounded-xl border border-slate-200 bg-white px-3 py-2.5 shadow-sm sm:px-4">
+          {loadError ? (
+            <div className="flex flex-wrap items-center justify-between gap-2" role="alert">
+              <p className="text-xs text-rose-700">
+                Unable to load places. {loadError}
+              </p>
+              <button
+                type="button"
+                onClick={onRetry}
+                className="min-h-9 rounded-lg border border-slate-200 px-3 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+              >
+                Retry
+              </button>
+            </div>
+          ) : isLoading ? (
+            <p className="text-xs text-slate-600" role="status">Finding places...</p>
+          ) : totalLocationCount === 0 ? (
+            <p className="text-xs text-slate-600">No places found.</p>
+          ) : (
+            <p className="text-xs text-slate-600">No places match the current filters.</p>
+          )}
+        </div>
+      )}
     </main>
   );
 }

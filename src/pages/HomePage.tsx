@@ -10,7 +10,7 @@ import { X, AlertCircle } from 'lucide-react';
 import { BULSU_MENESES_CAMPUS } from '../constants/locations';
 import { supabase } from '../lib/supabase';
 import type { SpotRow } from '../types/database';
-import { calculateDistanceKm, getWalkingRoute, type WalkingRoute } from '../utils/location';
+import { calculateDistanceKm, getOpeningStatus, getWalkingRoute, type WalkingRoute } from '../utils/location';
 import { AdminDashboard } from '../components/AdminDashboard';
 import { ContributeSpotModal } from '../components/ContributeSpotModal';
 import { ReportModal } from '../components/ReportModal';
@@ -30,11 +30,21 @@ export default function HomePage() {
   const [isLoadingLocations, setIsLoadingLocations] = useState(true);
   const [locationLoadError, setLocationLoadError] = useState<string | null>(null);
   const [selectedCategory, setSelectedCategory] = useState('__all__');
+  const [openNowFilter, setOpenNowFilter] = useState(false);
+  const [openingClockTick, setOpeningClockTick] = useState(0);
   const [reloadLocations, setReloadLocations] = useState(0);
   const [isAdminDashboardOpen, setIsAdminDashboardOpen] = useState(false);
   const [isContributeModalOpen, setIsContributeModalOpen] = useState(false);
   const [activeModal, setActiveModal] = useState<'admin' | 'report' | null>(null);
   const [userGps, setUserGps] = useState<{ latitude: number; longitude: number } | null>(null);
+
+  useEffect(() => {
+    const intervalId = window.setInterval(() => {
+      setOpeningClockTick((tick) => tick + 1);
+    }, 60_000);
+
+    return () => window.clearInterval(intervalId);
+  }, []);
 
   // Get user's live GPS location for routing & distance
   useEffect(() => {
@@ -178,10 +188,19 @@ export default function HomePage() {
           location.latitude >= -90 &&
           location.latitude <= 90 &&
           location.longitude >= -180 &&
-          location.longitude <= 180,
+          location.longitude <= 180 &&
+          (!openNowFilter || getOpeningStatus(location.hours) === 'open'),
       ),
-    [categoryLocations],
+    [categoryLocations, openNowFilter, openingClockTick],
   );
+
+  useEffect(() => {
+    if (openNowFilter && selectedSpot && getOpeningStatus(selectedSpot.hours) !== 'open') {
+      setSelectedSpot(null);
+      setIsDetailOpen(false);
+      setDirectionsSpotId(null);
+    }
+  }, [openingClockTick, openNowFilter, selectedSpot]);
 
   const handleLocateLocation = (location: SpotRow) => {
     setSelectedSpot(location);
@@ -204,6 +223,15 @@ export default function HomePage() {
       category !== '__all__' &&
       selectedSpot.category?.trim() !== category.trim()
     ) {
+      setSelectedSpot(null);
+      setIsDetailOpen(false);
+      setDirectionsSpotId(null);
+    }
+  };
+
+  const handleOpenNowChange = (enabled: boolean) => {
+    setOpenNowFilter(enabled);
+    if (enabled && selectedSpot && getOpeningStatus(selectedSpot.hours) !== 'open') {
       setSelectedSpot(null);
       setIsDetailOpen(false);
       setDirectionsSpotId(null);
@@ -259,6 +287,8 @@ export default function HomePage() {
             categories={categories}
             selectedCategory={selectedCategory}
             onCategoryChange={handleCategoryChange}
+            openNowFilter={openNowFilter}
+            onOpenNowChange={handleOpenNowChange}
             locations={locations}
             selectedSpotId={selectedSpot?.id ?? null}
             onLocateLocation={handleLocateLocation}
@@ -274,6 +304,8 @@ export default function HomePage() {
               categories={categories}
               selectedCategory={selectedCategory}
               onCategoryChange={handleCategoryChange}
+              openNowFilter={openNowFilter}
+              onOpenNowChange={handleOpenNowChange}
               locations={locations}
               selectedSpotId={selectedSpot?.id ?? null}
               onLocateLocation={handleLocateLocation}
@@ -283,14 +315,9 @@ export default function HomePage() {
 
         <MapArea
           onShareSpotClick={() => setIsContributeModalOpen(true)}
-          onReportSpotClick={(location) => {
-            setSelectedSpot(location);
-            setActiveModal('report');
-          }}
           onGetDirections={handleGetDirections} // <-- Add this line!
           locations={filteredLocations}
           totalLocationCount={locations.length}
-          invalidCoordinateCount={categoryLocations.length - filteredLocations.length}
           isLoading={isLoadingLocations}
           loadError={locationLoadError}
           onRetry={() => setReloadLocations((attempt) => attempt + 1)}
@@ -322,6 +349,10 @@ export default function HomePage() {
             setDirectionsSpotId(selectedSpot?.id ?? null);
           }}
           onRetryDirections={() => setDirectionsRetry((attempt) => attempt + 1)}
+          onReportIssue={(spot) => {
+            setSelectedSpot(spot);
+            setActiveModal('report');
+          }}
           onClearDirections={() => {
             setDirectionsSpotId(null);
             setWalkingRoute(null);

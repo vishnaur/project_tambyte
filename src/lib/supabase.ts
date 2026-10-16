@@ -29,11 +29,37 @@ export interface Spot {
   has_restroom?: boolean;
   is_shaded?: boolean;
   is_quiet?: boolean;
+  image_url?: string | null;
   approved: boolean;
   admin_edited?: boolean;
   approved_by?: string | null;
   approved_at?: string | null;
   created_at?: string;
+}
+
+const SPOT_IMAGE_BUCKET = 'spot-images';
+const MAX_SPOT_IMAGE_SIZE = 5 * 1024 * 1024;
+const ALLOWED_SPOT_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
+
+export async function uploadSpotImage(file: File): Promise<string> {
+  if (!ALLOWED_SPOT_IMAGE_TYPES.includes(file.type)) {
+    throw new Error('Choose a JPEG, PNG, or WebP image.');
+  }
+  if (file.size > MAX_SPOT_IMAGE_SIZE) {
+    throw new Error('Images must be 5 MB or smaller.');
+  }
+
+  const extension = file.type.split('/')[1].replace('jpeg', 'jpg');
+  const path = `${crypto.randomUUID()}.${extension}`;
+  const { error } = await supabase.storage
+    .from(SPOT_IMAGE_BUCKET)
+    .upload(path, file, { cacheControl: '3600', contentType: file.type });
+
+  if (error) {
+    throw new Error(`Unable to upload image: ${error.message}`);
+  }
+
+  return supabase.storage.from(SPOT_IMAGE_BUCKET).getPublicUrl(path).data.publicUrl;
 }
 
 // 1. Fetch approved spots for regular visitors to see on the map
