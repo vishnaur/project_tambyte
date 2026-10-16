@@ -1,6 +1,5 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useState } from 'react';
 import HomePage from './pages/HomePage';
-import { getApprovedSpots } from './lib/supabase';
 import { IntroSplash } from './components/IntroSplash';
 
 export default function App() {
@@ -11,14 +10,6 @@ export default function App() {
       return true;
     }
   });
-
-  useEffect(() => {
-    async function testBackend() {
-      const spots = await getApprovedSpots();
-      console.log('Database connected! Seed spots from Supabase:', spots);
-    }
-    testBackend();
-  }, []);
 
   const handleIntroFinish = useCallback(() => {
     try {

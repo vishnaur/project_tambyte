@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { supabase, uploadSpotImage } from '../lib/supabase';
+import { validateSpotSubmission } from '../lib/spotValidation';
 import { MapPin, Navigation, X, CheckCircle, Map as MapIcon, ImagePlus } from 'lucide-react';
 import { MapContainer, TileLayer, Marker, useMapEvents } from 'react-leaflet';
 import { BULSU_MENESES_CAMPUS } from '../constants/locations';
@@ -103,8 +104,23 @@ export function ContributeSpotModal({ isOpen, onClose, onSubmitted }: Contribute
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!latitude || !longitude) {
+    if (latitude === null || longitude === null) {
       alert('Location coordinates are required.');
+      return;
+    }
+
+    const validationError = validateSpotSubmission({
+      name,
+      category,
+      description,
+      locationDescription,
+      hours,
+      budgetRange,
+      latitude,
+      longitude,
+    });
+    if (validationError) {
+      alert(validationError);
       return;
     }
 
@@ -112,41 +128,43 @@ export function ContributeSpotModal({ isOpen, onClose, onSubmitted }: Contribute
 
     try {
       // Check if a spot with this name already exists (case-insensitive)
-      const { data: existingSpot } = await supabase
+      const { data: existingSpot, error: duplicateCheckError } = await supabase
         .from('spots')
         .select('id, name')
         .ilike('name', name.trim())
         .maybeSingle();
 
+      if (duplicateCheckError) {
+        throw new Error('Unable to check for duplicate places. Please try again.');
+      }
       if (existingSpot) {
         alert(`A spot named "${name}" is already registered on the map! Please check existing spots.`);
         setIsSubmitting(false);
         return;
       }
 
-      const imageUrl = imageFile ? await uploadSpotImage(imageFile) : null;
+      const imagePath = imageFile ? await uploadSpotImage(imageFile) : null;
 
       // Visitor submissions, including their photos, remain hidden until approved.
       const { error } = await supabase.from('spots').insert([
         {
-          name,
+          name: name.trim(),
           category,
-          description,
-          location_description: locationDescription,
+          description: description.trim(),
+          location_description: locationDescription.trim(),
           latitude,
           longitude,
-          hours,
+          hours: hours.trim(),
           open_time: openTime,
           close_time: closeTime,
-          budget_range: budgetRange,
+          budget_range: budgetRange.trim(),
           has_outlets: hasOutlets,
           is_shaded: isShaded,
           is_quiet: isQuiet,
           has_wifi: hasWifi,
           has_aircon: hasAircon,
           has_restroom: hasRestroom,
-          image_url: imageUrl,
-          approved: false,
+          image_path: imagePath,
         },
       ]);
 
@@ -157,7 +175,7 @@ export function ContributeSpotModal({ isOpen, onClose, onSubmitted }: Contribute
       setIsSuccess(true);
       onSubmitted();
     } catch (err) {
-      alert(err instanceof Error ? err.message : 'Error submitting spot.');
+      alert(err instanceof Error ? err.message : 'Unable to submit this place. Please try again.');
     } finally {
       setIsSubmitting(false);
     }

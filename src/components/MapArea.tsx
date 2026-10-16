@@ -38,6 +38,7 @@ import { useEffect, useRef, useState } from 'react';
 import { MapContainer, Marker, Popup, TileLayer, Circle, Polyline, useMap } from 'react-leaflet';
 import { BULSU_MENESES_CAMPUS } from '../constants/locations';
 import type { SpotRow } from '../types/database';
+import { SignedSpotImage } from './SignedSpotImage';
 import { getOpeningStatus, type WalkingRoute } from '../utils/location';
 
 interface CampusWeather {
@@ -666,8 +667,9 @@ export function MapArea({
                 <div className="relative isolate min-w-[170px] space-y-2.5 overflow-hidden rounded-lg p-1">
                   {location.image_url && (
                     <div className="pointer-events-none absolute -inset-x-1 -top-1 z-0 h-32 overflow-hidden" aria-hidden="true">
-                      <img
-                        src={location.image_url}
+                      <SignedSpotImage
+                        imagePath={location.image_path}
+                        imageUrl={location.image_url}
                         alt=""
                         className="h-full w-full object-cover opacity-85"
                       />

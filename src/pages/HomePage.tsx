@@ -8,7 +8,7 @@ import { Footer } from '../components/Footer';
 import { AdminLoginModal } from '../components/AdminLoginModal';
 import { X, AlertCircle } from 'lucide-react';
 import { BULSU_MENESES_CAMPUS } from '../constants/locations';
-import { supabase } from '../lib/supabase';
+import { supabase, withSignedSpotImages } from '../lib/supabase';
 import type { SpotRow } from '../types/database';
 import { calculateDistanceKm, getOpeningStatus, getWalkingRoute, type WalkingRoute } from '../utils/location';
 import { AdminDashboard } from '../components/AdminDashboard';
@@ -104,20 +104,48 @@ export default function HomePage() {
 
   // Check if admin is already logged in on initial load
   useEffect(() => {
-    async function checkAdminSession() {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (session?.user) {
-        const { data: adminRecord } = await supabase
-          .from('admins')
-          .select('role')
-          .eq('user_id', session.user.id)
-          .single();
-        if (adminRecord) {
-          setIsAdmin(true);
-        }
+    let isCurrentEffect = true;
+    let checkRevision = 0;
+    let latestUserId: string | null = null;
+
+    async function updateAdminState(userId: string | null) {
+      const revision = ++checkRevision;
+      if (!userId) {
+        setIsAdmin(false);
+        return;
+      }
+
+      const { data, error } = await supabase.rpc('is_admin');
+      if (isCurrentEffect && revision === checkRevision) {
+        const authorized = !error && data === true;
+        setIsAdmin(authorized);
+        if (!authorized) setIsAdminDashboardOpen(false);
       }
     }
-    checkAdminSession();
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (!session?.user) {
+        latestUserId = null;
+        checkRevision += 1;
+        setIsAdmin(false);
+        setIsAdminDashboardOpen(false);
+        return;
+      }
+      if (latestUserId !== session.user.id) {
+        latestUserId = session.user.id;
+        checkRevision += 1;
+        setIsAdmin(false);
+        setIsAdminDashboardOpen(false);
+      }
+      window.setTimeout(() => {
+        if (isCurrentEffect) void updateAdminState(session.user.id);
+      }, 0);
+    });
+
+    return () => {
+      isCurrentEffect = false;
+      subscription.unsubscribe();
+    };
   }, []);
 
   // Load spots from Supabase
@@ -140,8 +168,11 @@ export default function HomePage() {
           throw error;
         }
 
-        if (isCurrentRequest && data) {
-          setLocations(data as unknown as SpotRow[]);
+        if (data) {
+          const spotsWithImages = await withSignedSpotImages(data as unknown as SpotRow[]);
+          if (isCurrentRequest) {
+            setLocations(spotsWithImages);
+          }
         }
       } catch (error) {
         if (isCurrentRequest) {
@@ -239,8 +270,13 @@ export default function HomePage() {
   };
 
   const handleAdminLogout = async () => {
-    await supabase.auth.signOut();
     setIsAdmin(false);
+    setIsAdminDashboardOpen(false);
+    const { error } = await supabase.auth.signOut();
+    if (error) {
+      console.error('Unable to end the administrator session.');
+      window.alert('Unable to end the session completely. Please close this browser tab and try again.');
+    }
   };
   
   const handleViewDetails = (location: SpotRow) => {

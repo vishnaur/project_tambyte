@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { AlertCircle, Clock, Footprints, MapPin, X, Zap } from 'lucide-react';
 import { BULSU_MENESES_CAMPUS } from '../constants/locations';
 import type { SpotRow } from '../types/database';
+import { SignedSpotImage } from './SignedSpotImage';
 import { getOpeningStatus, type OpeningStatus, type WalkingRoute } from '../utils/location';
 
 interface SpotDetailPanelProps {
@@ -85,8 +86,9 @@ export function SpotDetailPanel({
       >
         {spot.image_url && (
           <div className="pointer-events-none absolute inset-x-0 top-0 z-0 h-45 overflow-hidden" aria-hidden="true">
-            <img
-              src={spot.image_url}
+            <SignedSpotImage
+              imagePath={spot.image_path}
+              imageUrl={spot.image_url}
               alt=""
               className="h-full w-full object-cover opacity-95"
             />

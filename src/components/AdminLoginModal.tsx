@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { supabase } from '../lib/supabase';
+import { isCurrentUserAdmin, supabase } from '../lib/supabase';
 import { Lock, Mail, X } from 'lucide-react';
 
 interface AdminLoginModalProps {
@@ -22,30 +22,27 @@ export function AdminLoginModal({ isOpen, onClose, onLoginSuccess }: AdminLoginM
     setErrorMessage(null);
 
     try {
-      // 1. Authenticate with Supabase
-      const { data, error } = await supabase.auth.signInWithPassword({
+      const { error } = await supabase.auth.signInWithPassword({
         email,
         password,
       });
 
-      if (error) throw error;
+      if (error) {
+        setErrorMessage('Unable to sign in. Check the account details and try again.');
+        return;
+      }
 
-      // 2. Check if this account exists in the 'admins' table
-      const { data: adminRecord, error: adminError } = await supabase
-        .from('admins')
-        .select('role')
-        .eq('user_id', data.user.id)
-        .single();
-
-      if (adminError || !adminRecord) {
+      if (!(await isCurrentUserAdmin())) {
         await supabase.auth.signOut();
-        throw new Error('Access denied. Account is not an authorized Admin.');
+        setErrorMessage('Access denied. Account is not an authorized administrator.');
+        return;
       }
 
       onLoginSuccess();
       onClose();
-    } catch (err: any) {
-      setErrorMessage(err.message || 'Login failed');
+    } catch {
+      await supabase.auth.signOut();
+      setErrorMessage('Unable to verify administrator access. Please try again later.');
     } finally {
       setLoading(false);
     }

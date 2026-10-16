@@ -25,7 +25,15 @@ export interface SpotRow {
   is_shaded: boolean;
   is_quiet: boolean;
   image_url: string | null;
+  image_path: string | null;
   is_active: boolean;
+  approved: boolean;
+  approved_by: string | null;
+  approved_at: string | null;
+  admin_edited: boolean;
+  open_time: string | null;
+  close_time: string | null;
+  budget_range: string | null;
   created_at: string;
 }
 
@@ -55,7 +63,12 @@ export interface Database {
       };
     };
     Views: Record<string, never>;
-    Functions: Record<string, never>;
+    Functions: {
+      is_admin: {
+        Args: Record<string, never>;
+        Returns: boolean;
+      };
+    };
     Enums: Record<string, never>;
     CompositeTypes: Record<string, never>;
   };

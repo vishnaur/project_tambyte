@@ -85,8 +85,8 @@ export function ReportModal({ isOpen, onClose, spots, preselectedSpot }: ReportM
 
       if (error) throw error;
       setIsSuccess(true);
-    } catch (err: any) {
-      alert(err.message || 'Error submitting report.');
+    } catch {
+      alert('Unable to submit this report. Please try again.');
     } finally {
       setIsSubmitting(false);
     }

@@ -1,5 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { supabase, Spot, uploadSpotImage } from '../lib/supabase';
+import { supabase, Spot, uploadSpotImage, withSignedSpotImages } from '../lib/supabase';
+import { SignedSpotImage } from './SignedSpotImage';
+import { validateSpotSubmission } from '../lib/spotValidation';
 import { CheckCircle2, Trash2, Plus, Clock, MapPin, X, AlertTriangle, ArrowLeft, Pencil, ShieldCheck, History, ImagePlus, Filter } from 'lucide-react';
 import { MapContainer, TileLayer, Marker, useMapEvents } from 'react-leaflet';
 import { BULSU_MENESES_CAMPUS } from '../constants/locations';
@@ -151,57 +153,50 @@ export function AdminDashboard({ isOpen, onClose, onSpotsUpdated }: AdminDashboa
     setLoading(true);
     try {
       // 1. Fetch pending spots (Student submissions)
-      const { data: pending } = await supabase
+      const { data: pending, error: pendingError } = await supabase
         .from('spots')
         .select('*')
         .eq('approved', false)
         .order('created_at', { ascending: false });
+      if (pendingError) throw pendingError;
+      const pendingWithImages = await withSignedSpotImages((pending as Spot[] | null) ?? []);
 
       // 2. Fetch approved spots
-      const { data: approved } = await supabase
+      const { data: approved, error: approvedError } = await supabase
         .from('spots')
         .select('*')
         .eq('approved', true)
         .order('name', { ascending: true });
+      if (approvedError) throw approvedError;
+      const approvedWithImages = await withSignedSpotImages((approved as Spot[] | null) ?? []);
 
-      setPendingSpots((pending as Spot[]) || []);
-      setApprovedSpots((approved as Spot[]) || []);
+      setPendingSpots(pendingWithImages);
+      setApprovedSpots(approvedWithImages);
 
       // Fetch latest 50 admin audit actions
-      const { data: logs } = await supabase
+      const { data: logs, error: logsError } = await supabase
         .from('admin_logs')
         .select('*')
         .order('created_at', { ascending: false })
         .limit(50);
+      if (logsError) throw logsError;
       setAdminLogs(logs || []);
-      const { data: reportList } = await supabase
+      const { data: reportList, error: reportsError } = await supabase
         .from('reports')
         .select('*')
         .order('created_at', { ascending: false });
+      if (reportsError) throw reportsError;
       setReports(reportList || []);
     } catch (err) {
       console.error('Error loading spots:', err);
+      setActionMessage(err instanceof Error ? err.message : 'Unable to load dashboard data.');
     } finally {
       setLoading(false);
     }
   }
 
-  async function logAction(action: string, spotName: string, details?: string) {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return;
-    await supabase.from('admin_logs').insert([
-      {
-        admin_id: user.id,
-        admin_email: user.email || 'Admin',
-        action,
-        spot_name: spotName,
-        details: details || null,
-      },
-    ]);
-  }
-
   // Action: Approve student submission
-  async function handleApprove(id: string, spotName: string) {
+  async function handleApprove(id: string) {
     const { data: { user }, error: userError } = await supabase.auth.getUser();
     if (userError || !user) {
       setActionMessage(`Unable to verify the admin account: ${userError?.message ?? 'No signed-in user.'}`);
@@ -212,6 +207,7 @@ export function AdminDashboard({ isOpen, onClose, onSpotsUpdated }: AdminDashboa
       .from('spots')
       .update({
         approved: true,
+        is_active: true,
         approved_by: user.id,
         approved_at: new Date().toISOString(),
       })
@@ -230,12 +226,6 @@ export function AdminDashboard({ isOpen, onClose, onSpotsUpdated }: AdminDashboa
       return;
     }
 
-    const spotData = pendingSpots.find((s) => s.id === id);
-    const approveDetails = spotData
-      ? `Category: ${spotData.category} · Hours: ${spotData.hours}${spotData.has_wifi ? ' · Wi-Fi' : ''}${spotData.has_outlets ? ' · Outlets' : ''}`
-      : 'Approved student contribution to live map';
-
-    await logAction('APPROVED_SPOT', spotName, approveDetails);
     setActionMessage('Spot approved and added to the live map!');
     await loadSpots();
     onSpotsUpdated();
@@ -268,27 +258,26 @@ export function AdminDashboard({ isOpen, onClose, onSpotsUpdated }: AdminDashboa
 
     const latitude = Number(editFormData.latitude);
     const longitude = Number(editFormData.longitude);
-    if (
-      !Number.isFinite(latitude) ||
-      latitude < -90 ||
-      latitude > 90 ||
-      !Number.isFinite(longitude) ||
-      longitude < -180 ||
-      longitude > 180
-    ) {
-      setActionMessage('Enter valid latitude and longitude coordinates before saving.');
-      return;
-    }
-    if (!editFormData.name.trim() || !editFormData.hours.trim()) {
-      setActionMessage('Place name and operating hours are required.');
+    const validationError = validateSpotSubmission({
+      name: editFormData.name,
+      category: editFormData.category,
+      description: editFormData.description,
+      locationDescription: editFormData.location_description,
+      hours: editFormData.hours,
+      budgetRange: editFormData.budget_range,
+      latitude,
+      longitude,
+    });
+    if (validationError) {
+      setActionMessage(validationError);
       return;
     }
 
     setIsSavingEdit(true);
-    let imageUrl = editingSpot.image_url ?? null;
+    let imagePath = editingSpot.image_path ?? null;
     try {
       if (editSpotImage) {
-        imageUrl = await uploadSpotImage(editSpotImage);
+        imagePath = await uploadSpotImage(editSpotImage);
       }
     } catch (error) {
       setIsSavingEdit(false);
@@ -313,7 +302,8 @@ export function AdminDashboard({ isOpen, onClose, onSpotsUpdated }: AdminDashboa
         has_restroom: editFormData.has_restroom,
         is_shaded: editFormData.is_shaded,
         is_quiet: editFormData.is_quiet,
-        image_url: imageUrl,
+        image_path: imagePath,
+        image_url: null,
         approved: editingSpot.approved,
         admin_edited: true,
         ...(!editingSpot.approved && {
@@ -340,68 +330,28 @@ export function AdminDashboard({ isOpen, onClose, onSpotsUpdated }: AdminDashboa
       return;
     }
 
-    // 1. Detect exactly which fields changed
-    const changes: string[] = [];
-    if (editingSpot.name.trim() !== editFormData.name.trim()) {
-      changes.push(`Name: "${editingSpot.name.trim()}" → "${editFormData.name.trim()}"`);
-    }
-
-    const prevLat = Number(editingSpot.latitude);
-    const prevLng = Number(editingSpot.longitude);
-    if (Math.abs(prevLat - latitude) > 0.00001 || Math.abs(prevLng - longitude) > 0.00001) {
-      changes.push(
-        `Location: (${prevLat.toFixed(5)}, ${prevLng.toFixed(5)}) → (${latitude.toFixed(5)}, ${longitude.toFixed(5)})`
-      );
-    }
-
-    if (editingSpot.category !== editFormData.category) {
-      changes.push(`Category: "${editingSpot.category}" → "${editFormData.category}"`);
-    }
-    if (editingSpot.hours.trim() !== editFormData.hours.trim()) {
-      changes.push(`Hours: "${editingSpot.hours.trim()}" → "${editFormData.hours.trim()}"`);
-    }
-    if ((editingSpot.budget_range || '').trim() !== editFormData.budget_range.trim()) {
-      changes.push(`Budget: "${editingSpot.budget_range || 'None'}" → "${editFormData.budget_range.trim() || 'None'}"`);
-    }
-    if (Boolean(editingSpot.has_wifi) !== editFormData.has_wifi) {
-      changes.push(editFormData.has_wifi ? '+Added Wi-Fi' : '-Removed Wi-Fi');
-    }
-    if (Boolean(editingSpot.has_outlets) !== editFormData.has_outlets) {
-      changes.push(editFormData.has_outlets ? '+Added Outlets' : '-Removed Outlets');
-    }
-    if (Boolean(editingSpot.has_aircon) !== editFormData.has_aircon) {
-      changes.push(editFormData.has_aircon ? '+Added Aircon' : '-Removed Aircon');
-    }
-    if (Boolean(editingSpot.is_shaded) !== editFormData.is_shaded) {
-      changes.push(editFormData.is_shaded ? '+Added Shaded' : '-Removed Shaded');
-    }
-    if (Boolean(editingSpot.is_quiet) !== editFormData.is_quiet) {
-      changes.push(editFormData.is_quiet ? '+Marked Quiet' : '-Unmarked Quiet');
-    }
-
-    let changeSummary = changes.length > 0 
-      ? changes.join(' · ') 
-      : 'Saved without field changes';
-
-    // Tag the log if this edit was triggered by a student report fix
+    let reportResolutionFailed = false;
     if (resolvingReportId) {
-      changeSummary = `[Resolved Student Report] ${changeSummary}`;
-    }
-
-    await logAction('EDITED_SPOT', editFormData.name.trim(), changeSummary);
-    if (resolvingReportId) {
-      await supabase.from('reports').delete().eq('id', resolvingReportId);
-      setResolvingReportId(null);
+      const { error: reportError } = await supabase
+        .from('reports')
+        .delete()
+        .eq('id', resolvingReportId);
+      if (reportError) {
+        reportResolutionFailed = true;
+      } else {
+        setResolvingReportId(null);
+      }
     }
 
     setEditingSpot(null);
     setEditFormData(null);
     setEditSpotImage(null);
-    setActionMessage(
-      editingSpot.approved
-        ? 'Active place updated successfully.'
-        : 'Changes saved. This submission still needs admin approval.',
-    );
+    const updateMessage = editingSpot.approved
+      ? 'Active place updated successfully.'
+      : 'Changes saved. This submission still needs admin approval.';
+    const messages = [updateMessage, reportResolutionFailed ? 'The related report could not be resolved.' : '']
+      .filter(Boolean);
+    setActionMessage(messages.join(' '));
     await loadSpots();
     onSpotsUpdated();
   }
@@ -421,16 +371,18 @@ export function AdminDashboard({ isOpen, onClose, onSpotsUpdated }: AdminDashboa
       return;
     }
 
-    await logAction('DELETED_SPOT', name, 'Deleted spot from database');
     setActionMessage(`Permanently removed "${name}".`);
     setSpotToDelete(null);
     await loadSpots();
     onSpotsUpdated();
   }
 
-  async function handleDismissReport(reportId: string, spotName: string) {
-    await supabase.from('reports').delete().eq('id', reportId);
-    await logAction('DISMISSED_REPORT', spotName, 'Admin dismissed student report');
+  async function handleDismissReport(reportId: string) {
+    const { error } = await supabase.from('reports').delete().eq('id', reportId);
+    if (error) {
+      setActionMessage('Unable to dismiss this report.');
+      return;
+    }
     setActionMessage('Report dismissed.');
     await loadSpots();
   }
@@ -438,15 +390,30 @@ export function AdminDashboard({ isOpen, onClose, onSpotsUpdated }: AdminDashboa
   // Action: Admin manually adding a verified spot
   async function handleCreateSpot(e: React.FormEvent) {
     e.preventDefault();
+    const validationError = validateSpotSubmission({
+      name: formData.name,
+      category: formData.category,
+      description: formData.description ?? '',
+      locationDescription: formData.location_description ?? '',
+      hours: formData.hours,
+      budgetRange: formData.budget_range ?? '',
+      latitude: formData.latitude,
+      longitude: formData.longitude,
+    });
+    if (validationError) {
+      setActionMessage(validationError);
+      return;
+    }
     setLoading(true);
 
     try {
-      const imageUrl = newSpotImage ? await uploadSpotImage(newSpotImage) : null;
+      const imagePath = newSpotImage ? await uploadSpotImage(newSpotImage) : null;
       const { error } = await supabase.from('spots').insert([
         {
           ...formData,
-          image_url: imageUrl,
+          image_path: imagePath,
           approved: true,
+          is_active: true,
         },
       ]);
       if (error) throw error;
@@ -625,8 +592,9 @@ export function AdminDashboard({ isOpen, onClose, onSpotsUpdated }: AdminDashboa
                     >
                       <div className="space-y-3">
                         {spot.image_url && (
-                          <img
-                            src={spot.image_url}
+                          <SignedSpotImage
+                            imagePath={spot.image_path}
+                            imageUrl={spot.image_url}
                             alt={`Photo submitted for ${spot.name}`}
                             className="h-36 w-full rounded-xl object-cover"
                           />
@@ -739,7 +707,7 @@ export function AdminDashboard({ isOpen, onClose, onSpotsUpdated }: AdminDashboa
                         Edit
                       </button>
                       <button
-                        onClick={() => handleApprove(spot.id, spot.name)}
+                        onClick={() => handleApprove(spot.id)}
                         className="flex min-w-0 flex-1 items-center justify-center gap-1 rounded-xl bg-dark-burgundy py-2 text-xs font-semibold text-white hover:bg-deep-maroon shadow-sm transition-colors"
                       >
                         <CheckCircle2 className="h-3.5 w-3.5" />
@@ -1251,7 +1219,7 @@ export function AdminDashboard({ isOpen, onClose, onSpotsUpdated }: AdminDashboa
 
                     <div className="flex items-center justify-between pt-3 mt-3 border-t border-slate-100">
                       <button
-                        onClick={() => handleDismissReport(report.id, report.spot_name)}
+                        onClick={() => handleDismissReport(report.id)}
                         className="rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-50 transition-colors"
                       >
                         Dismiss
@@ -1478,13 +1446,20 @@ export function AdminDashboard({ isOpen, onClose, onSpotsUpdated }: AdminDashboa
                 <label htmlFor="admin-edit-spot-image">
                   Spot photo
                 </label>
-                {(editSpotImagePreview || editingSpot.image_url) && (
+                {editSpotImagePreview ? (
                   <img
-                    src={editSpotImagePreview ?? editingSpot.image_url ?? ''}
-                    alt={`${editSpotImage ? 'Selected' : 'Current'} photo for ${editingSpot.name}`}
+                    src={editSpotImagePreview}
+                    alt={`Selected photo for ${editingSpot.name}`}
                     className="mt-2 h-32 w-full rounded-xl object-cover"
                   />
-                )}
+                ) : editingSpot.image_url ? (
+                  <SignedSpotImage
+                    imagePath={editingSpot.image_path}
+                    imageUrl={editingSpot.image_url}
+                    alt={`Current photo for ${editingSpot.name}`}
+                    className="mt-2 h-32 w-full rounded-xl object-cover"
+                  />
+                ) : null}
                 <input
                   ref={editSpotImageInputRef}
                   id="admin-edit-spot-image"
