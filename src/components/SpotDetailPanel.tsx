@@ -124,11 +124,11 @@ export function SpotDetailPanel({
           <div className="flex items-start gap-2.5">
             <MapPin className="mt-0.5 h-4 w-4 shrink-0 text-slate-400" aria-hidden="true" />
             <div>
-              <span className="font-semibold text-slate-800">Straight-line distance from BulSU: </span>
+              <span className="font-semibold text-slate-800">Distance from your location: </span>
               <span>{distanceKm === null ? 'Information unavailable' : `${distanceKm.toFixed(1)} km`}</span>
               {distanceKm !== null && (
                 <p className="mt-1 text-xs text-slate-500">
-                  This is a geographic estimate, not road distance.
+                  Estimated straight-line distance from your GPS.
                 </p>
               )}
             </div>
@@ -170,7 +170,7 @@ export function SpotDetailPanel({
                 <h3 className="text-sm font-semibold text-slate-900">Directions</h3>
                 {directionsLoading ? (
                   <p className="text-xs text-slate-600" role="status">
-                    Finding a walking route from {BULSU_MENESES_CAMPUS.name}…
+                    Finding walking route from your current location…
                   </p>
                 ) : directionsError ? (
                   <div className="space-y-2" role="alert">

@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { supabase, Spot } from '../lib/supabase';
-import { CheckCircle2, Trash2, Plus, Clock, MapPin, X, AlertTriangle, ArrowLeft, Pencil, ShieldCheck } from 'lucide-react';
+import { CheckCircle2, Trash2, Plus, Clock, MapPin, X, AlertTriangle, ArrowLeft, Pencil, ShieldCheck, History } from 'lucide-react';
 import { MapContainer, TileLayer, Marker, useMapEvents } from 'react-leaflet';
 import { BULSU_MENESES_CAMPUS } from '../constants/locations';
 
@@ -13,6 +13,21 @@ const SPOT_CATEGORIES: Spot['category'][] = [
   'Essentials',
   'Other',
 ];
+
+function parseReportCoordinates(text?: string | null): { lat: number; lng: number } | null {
+  if (!text) return null;
+  const latMatch = text.match(/Lat(?:itude)?[:\s]+([0-9.-]+)/i);
+  const lngMatch = text.match(/L(?:ng|ong(?:itude)?)[:\s]+([0-9.-]+)/i);
+
+  if (latMatch && lngMatch) {
+    const lat = parseFloat(latMatch[1]);
+    const lng = parseFloat(lngMatch[1]);
+    if (Number.isFinite(lat) && Number.isFinite(lng)) {
+      return { lat, lng };
+    }
+  }
+  return null;
+}
 
 function createDefaultSpotFormData(): Omit<Spot, 'id' | 'approved' | 'created_at'> {
   return {
@@ -69,15 +84,19 @@ interface AdminDashboardProps {
 }
 
 export function AdminDashboard({ isOpen, onClose, onSpotsUpdated }: AdminDashboardProps) {
-  const [activeTab, setActiveTab] = useState<'pending' | 'approved' | 'add'>('pending');
+  const [activeTab, setActiveTab] = useState<'pending' | 'approved' | 'add' | 'logs' | 'reports'>('pending');
   const [pendingSpots, setPendingSpots] = useState<Spot[]>([]);
   const [approvedSpots, setApprovedSpots] = useState<Spot[]>([]);
+  const [adminLogs, setAdminLogs] = useState<any[]>([]);
+  const [reports, setReports] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [isSavingEdit, setIsSavingEdit] = useState(false);
   const [actionMessage, setActionMessage] = useState<string | null>(null);
   const [activeSearchQuery, setActiveSearchQuery] = useState('');
   const [editingSpot, setEditingSpot] = useState<Spot | null>(null);
   const [editFormData, setEditFormData] = useState<SpotEditForm | null>(null);
+  const [spotToDelete, setSpotToDelete] = useState<{ id: string; name: string } | null>(null);
+  const [resolvingReportId, setResolvingReportId] = useState<string | null>(null);
 
   // Form state for adding a verified spot directly
   const [formData, setFormData] = useState(createDefaultSpotFormData);
@@ -107,6 +126,19 @@ export function AdminDashboard({ isOpen, onClose, onSpotsUpdated }: AdminDashboa
 
       setPendingSpots((pending as Spot[]) || []);
       setApprovedSpots((approved as Spot[]) || []);
+
+      // Fetch latest 50 admin audit actions
+      const { data: logs } = await supabase
+        .from('admin_logs')
+        .select('*')
+        .order('created_at', { ascending: false })
+        .limit(50);
+      setAdminLogs(logs || []);
+      const { data: reportList } = await supabase
+        .from('reports')
+        .select('*')
+        .order('created_at', { ascending: false });
+      setReports(reportList || []);
     } catch (err) {
       console.error('Error loading spots:', err);
     } finally {
@@ -114,8 +146,22 @@ export function AdminDashboard({ isOpen, onClose, onSpotsUpdated }: AdminDashboa
     }
   }
 
+  async function logAction(action: string, spotName: string, details?: string) {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+    await supabase.from('admin_logs').insert([
+      {
+        admin_id: user.id,
+        admin_email: user.email || 'Admin',
+        action,
+        spot_name: spotName,
+        details: details || null,
+      },
+    ]);
+  }
+
   // Action: Approve student submission
-  async function handleApprove(id: string) {
+  async function handleApprove(id: string, spotName: string) {
     const { data: { user }, error: userError } = await supabase.auth.getUser();
     if (userError || !user) {
       setActionMessage(`Unable to verify the admin account: ${userError?.message ?? 'No signed-in user.'}`);
@@ -144,6 +190,12 @@ export function AdminDashboard({ isOpen, onClose, onSpotsUpdated }: AdminDashboa
       return;
     }
 
+    const spotData = pendingSpots.find((s) => s.id === id);
+    const approveDetails = spotData
+      ? `Category: ${spotData.category} · Hours: ${spotData.hours}${spotData.has_wifi ? ' · Wi-Fi' : ''}${spotData.has_outlets ? ' · Outlets' : ''}`
+      : 'Approved student contribution to live map';
+
+    await logAction('APPROVED_SPOT', spotName, approveDetails);
     setActionMessage('Spot approved and added to the live map!');
     await loadSpots();
     onSpotsUpdated();
@@ -234,6 +286,60 @@ export function AdminDashboard({ isOpen, onClose, onSpotsUpdated }: AdminDashboa
       return;
     }
 
+    // 1. Detect exactly which fields changed
+    const changes: string[] = [];
+    if (editingSpot.name.trim() !== editFormData.name.trim()) {
+      changes.push(`Name: "${editingSpot.name.trim()}" → "${editFormData.name.trim()}"`);
+    }
+
+    const prevLat = Number(editingSpot.latitude);
+    const prevLng = Number(editingSpot.longitude);
+    if (Math.abs(prevLat - latitude) > 0.00001 || Math.abs(prevLng - longitude) > 0.00001) {
+      changes.push(
+        `Location: (${prevLat.toFixed(5)}, ${prevLng.toFixed(5)}) → (${latitude.toFixed(5)}, ${longitude.toFixed(5)})`
+      );
+    }
+
+    if (editingSpot.category !== editFormData.category) {
+      changes.push(`Category: "${editingSpot.category}" → "${editFormData.category}"`);
+    }
+    if (editingSpot.hours.trim() !== editFormData.hours.trim()) {
+      changes.push(`Hours: "${editingSpot.hours.trim()}" → "${editFormData.hours.trim()}"`);
+    }
+    if ((editingSpot.budget_range || '').trim() !== editFormData.budget_range.trim()) {
+      changes.push(`Budget: "${editingSpot.budget_range || 'None'}" → "${editFormData.budget_range.trim() || 'None'}"`);
+    }
+    if (Boolean(editingSpot.has_wifi) !== editFormData.has_wifi) {
+      changes.push(editFormData.has_wifi ? '+Added Wi-Fi' : '-Removed Wi-Fi');
+    }
+    if (Boolean(editingSpot.has_outlets) !== editFormData.has_outlets) {
+      changes.push(editFormData.has_outlets ? '+Added Outlets' : '-Removed Outlets');
+    }
+    if (Boolean(editingSpot.has_aircon) !== editFormData.has_aircon) {
+      changes.push(editFormData.has_aircon ? '+Added Aircon' : '-Removed Aircon');
+    }
+    if (Boolean(editingSpot.is_shaded) !== editFormData.is_shaded) {
+      changes.push(editFormData.is_shaded ? '+Added Shaded' : '-Removed Shaded');
+    }
+    if (Boolean(editingSpot.is_quiet) !== editFormData.is_quiet) {
+      changes.push(editFormData.is_quiet ? '+Marked Quiet' : '-Unmarked Quiet');
+    }
+
+    let changeSummary = changes.length > 0 
+      ? changes.join(' · ') 
+      : 'Saved without field changes';
+
+    // Tag the log if this edit was triggered by a student report fix
+    if (resolvingReportId) {
+      changeSummary = `[Resolved Student Report] ${changeSummary}`;
+    }
+
+    await logAction('EDITED_SPOT', editFormData.name.trim(), changeSummary);
+    if (resolvingReportId) {
+      await supabase.from('reports').delete().eq('id', resolvingReportId);
+      setResolvingReportId(null);
+    }
+
     setEditingSpot(null);
     setEditFormData(null);
     setActionMessage(
@@ -245,9 +351,9 @@ export function AdminDashboard({ isOpen, onClose, onSpotsUpdated }: AdminDashboa
     onSpotsUpdated();
   }
 
-  // Action: Reject or Delete spot
-  async function handleDelete(id: string) {
-    if (!confirm('Are you sure you want to delete this spot?')) return;
+  async function executeDelete() {
+    if (!spotToDelete) return;
+    const { id, name } = spotToDelete;
 
     const { error } = await supabase
       .from('spots')
@@ -256,12 +362,22 @@ export function AdminDashboard({ isOpen, onClose, onSpotsUpdated }: AdminDashboa
 
     if (error) {
       setActionMessage(`Unable to remove spot: ${error.message}`);
+      setSpotToDelete(null);
       return;
     }
 
-    setActionMessage('Spot removed successfully.');
+    await logAction('DELETED_SPOT', name, 'Deleted spot from database');
+    setActionMessage(`Permanently removed "${name}".`);
+    setSpotToDelete(null);
     await loadSpots();
     onSpotsUpdated();
+  }
+
+  async function handleDismissReport(reportId: string, spotName: string) {
+    await supabase.from('reports').delete().eq('id', reportId);
+    await logAction('DISMISSED_REPORT', spotName, 'Admin dismissed student report');
+    setActionMessage('Report dismissed.');
+    await loadSpots();
   }
 
   // Action: Admin manually adding a verified spot
@@ -308,26 +424,44 @@ export function AdminDashboard({ isOpen, onClose, onSpotsUpdated }: AdminDashboa
 
         {/* Tab Navigation */}
         <div className="grid w-full grid-cols-2 gap-1 rounded-xl bg-slate-100 p-1 text-xs font-semibold sm:grid-cols-3 lg:flex lg:w-auto">
-          <button
-            onClick={() => setActiveTab('pending')}
-            className={`rounded-lg px-2 py-1.5 text-center transition-all sm:px-3 ${
-              activeTab === 'pending'
-                ? 'bg-white text-dark-burgundy shadow-sm'
-                : 'text-slate-600 hover:text-slate-900'
-            }`}
-          >
-            Contributions ({pendingSpots.length})
-          </button>
+          {/* 1. Active Places */}
           <button
             onClick={() => setActiveTab('approved')}
             className={`rounded-lg px-2 py-1.5 text-center transition-all sm:px-3 ${
               activeTab === 'approved'
-                ? 'bg-white text-dark-burgundy shadow-sm'
+                ? 'bg-dark-burgundy text-white shadow-sm'
                 : 'text-slate-600 hover:text-slate-900'
             }`}
           >
             Active Places ({approvedSpots.length})
           </button>
+
+          {/* 2. Contributions */}
+          <button
+            onClick={() => setActiveTab('pending')}
+            className={`rounded-lg px-2 py-1.5 text-center transition-all sm:px-3 ${
+              activeTab === 'pending'
+                ? 'bg-dark-burgundy text-white shadow-sm'
+                : 'text-slate-600 hover:text-slate-900'
+            }`}
+          >
+            Contributions ({pendingSpots.length})
+          </button>
+
+          {/* 3. Reports */}
+          <button
+            onClick={() => setActiveTab('reports')}
+            className={`flex items-center justify-center gap-1 rounded-lg px-2 py-1.5 text-center transition-all sm:px-3 ${
+              activeTab === 'reports'
+                ? 'bg-dark-burgundy text-white shadow-sm'
+                : 'text-slate-600 hover:text-slate-900'
+            }`}
+          >
+            <AlertTriangle className="h-3.5 w-3.5 text-rose-400" />
+            Reports ({reports.length})
+          </button>
+
+          {/* 4. Add New Spot */}
           <button
             onClick={() => setActiveTab('add')}
             className={`flex items-center justify-center gap-1 rounded-lg px-2 py-1.5 text-center transition-all sm:px-3 ${
@@ -338,6 +472,19 @@ export function AdminDashboard({ isOpen, onClose, onSpotsUpdated }: AdminDashboa
           >
             <Plus className="h-3.5 w-3.5" />
             Add New Spot
+          </button>
+
+          {/* 5. History */}
+          <button
+            onClick={() => setActiveTab('logs')}
+            className={`flex items-center justify-center gap-1 rounded-lg px-2 py-1.5 text-center transition-all sm:px-3 ${
+              activeTab === 'logs'
+                ? 'bg-dark-burgundy text-white shadow-sm'
+                : 'text-slate-600 hover:text-slate-900'
+            }`}
+          >
+            <History className="h-3.5 w-3.5" />
+            History ({adminLogs.length})
           </button>
         </div>
       </header>
@@ -407,11 +554,6 @@ export function AdminDashboard({ isOpen, onClose, onSpotsUpdated }: AdminDashboa
                       <div className="flex items-start justify-between gap-2">
                         <div>
                           <h3 className="font-bold text-sm text-slate-900 leading-snug">{spot.name}</h3>
-                          {spot.admin_edited && (
-                            <span className="mt-1 inline-flex rounded-full border border-gold/40 bg-gold/10 px-2 py-0.5 text-[10px] font-semibold text-dark-burgundy">
-                              Edited by admin · pending approval
-                            </span>
-                          )}
                           {spot.location_description && (
                             <p className="text-[11px] text-slate-500 mt-0.5">{spot.location_description}</p>
                           )}
@@ -493,7 +635,7 @@ export function AdminDashboard({ isOpen, onClose, onSpotsUpdated }: AdminDashboa
                     {/* Actions: Approve / Reject Buttons */}
                     <div className="flex items-center gap-2 pt-4 mt-3 border-t border-slate-100">
                       <button
-                        onClick={() => handleDelete(spot.id)}
+                        onClick={() => setSpotToDelete({ id: spot.id, name: spot.name })}
                         className="flex min-w-0 flex-1 items-center justify-center gap-1 rounded-xl border border-rose-200 bg-white py-2 text-xs font-semibold text-rose-600 hover:bg-rose-50 transition-colors"
                       >
                         <Trash2 className="h-3.5 w-3.5" />
@@ -508,7 +650,7 @@ export function AdminDashboard({ isOpen, onClose, onSpotsUpdated }: AdminDashboa
                         Edit
                       </button>
                       <button
-                        onClick={() => handleApprove(spot.id)}
+                        onClick={() => handleApprove(spot.id, spot.name)}
                         className="flex min-w-0 flex-1 items-center justify-center gap-1 rounded-xl bg-dark-burgundy py-2 text-xs font-semibold text-white hover:bg-deep-maroon shadow-sm transition-colors"
                       >
                         <CheckCircle2 className="h-3.5 w-3.5" />
@@ -573,12 +715,6 @@ export function AdminDashboard({ isOpen, onClose, onSpotsUpdated }: AdminDashboa
                         </span>
                       </div>
 
-                      {spot.admin_edited && spot.approved && (
-                        <div className="flex items-center gap-1.5 rounded-lg border border-emerald-200 bg-emerald-50 px-2 py-1.5 text-[11px] font-medium text-emerald-800">
-                          <ShieldCheck className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
-                          Edited and approved by admin
-                        </div>
-                      )}
 
                       {/* Info Details */}
                       <div className="admin-info space-y-1.5 rounded-xl border p-2.5 text-xs">
@@ -660,7 +796,7 @@ export function AdminDashboard({ isOpen, onClose, onSpotsUpdated }: AdminDashboa
                         Edit Spot
                       </button>
                       <button
-                        onClick={() => handleDelete(spot.id)}
+                        onClick={() => setSpotToDelete({ id: spot.id, name: spot.name })}
                         className="flex items-center gap-1.5 rounded-xl border border-rose-200 bg-white px-3 py-1.5 text-xs font-semibold text-rose-600 hover:bg-rose-50 transition-colors"
                       >
                         <Trash2 className="h-3.5 w-3.5" />
@@ -671,7 +807,7 @@ export function AdminDashboard({ isOpen, onClose, onSpotsUpdated }: AdminDashboa
                 ))}
             </div>
           </div>
-        ) : (
+        ) : activeTab === 'add' ? (
           /* TAB 3: ADMIN ADD NEW SPOT FORM */
           <form onSubmit={handleCreateSpot} className="mx-auto max-w-xl space-y-4 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-6">
             <h2 className="text-base font-bold text-slate-900">Add Verified Campus Spot</h2>
@@ -812,8 +948,212 @@ export function AdminDashboard({ isOpen, onClose, onSpotsUpdated }: AdminDashboa
               Save and Publish to Live Map
             </button>
           </form>
+        ) : activeTab === 'logs' ? (
+          /* TAB 4: AUDIT HISTORY LOG TABLE */
+          <div className="space-y-4">
+            <div className="flex flex-col items-start justify-between gap-2 border-b border-slate-200 pb-2 sm:flex-row sm:items-center">
+              <div>
+                <h2 className="text-base font-bold text-slate-900">Admin Audit Trail</h2>
+                <p className="text-xs text-slate-500">
+                  Track of all spot approvals, deletions, and additions made by administrators.
+                </p>
+              </div>
+              <span className="rounded-full bg-gold/25 px-3 py-1 text-xs font-bold text-deep-maroon border border-gold/40">
+                {adminLogs.length} Actions Logged
+              </span>
+            </div>
+
+            {adminLogs.length === 0 ? (
+              <div className="rounded-2xl border border-dashed border-slate-300 p-12 text-center bg-white">
+                <p className="text-sm text-slate-500">No activity recorded yet.</p>
+              </div>
+            ) : (
+              <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-sm">
+                <table className="w-full text-left text-xs">
+                  <thead className="border-b border-slate-200 bg-[#FAF7F0] font-semibold text-slate-600">
+                    <tr>
+                      <th className="px-4 py-3">Timestamp</th>
+                      <th className="px-4 py-3">Admin</th>
+                      <th className="px-4 py-3">Action</th>
+                      <th className="px-4 py-3">Spot Name</th>
+                      <th className="px-4 py-3">Details</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {adminLogs.map((log) => (
+                      <tr key={log.id} className="hover:bg-slate-50/80">
+                        <td className="px-4 py-3 font-mono text-[11px] text-slate-500 whitespace-nowrap">
+                          {new Date(log.created_at).toLocaleString([], {
+                            month: 'short',
+                            day: 'numeric',
+                            hour: '2-digit',
+                            minute: '2-digit',
+                          })}
+                        </td>
+                        <td className="px-4 py-3 font-semibold text-slate-800">{log.admin_email}</td>
+                        <td className="px-4 py-3">
+                          <span
+                            className={`rounded-md px-2 py-0.5 text-[10px] font-bold ${
+                              log.action === 'APPROVED_SPOT'
+                              ? 'border border-emerald-300 bg-emerald-50 text-emerald-800'
+                              : log.action === 'DELETED_SPOT'
+                              ? 'border border-rose-300 bg-rose-50 text-rose-800'
+                              : log.action === 'EDITED_SPOT'
+                              ? 'border border-amber-300 bg-amber-50 text-amber-800'
+                              : 'border border-blue-300 bg-blue-50 text-blue-800'
+                            }`}
+                          >
+                            {log.action.replace('_SPOT', '')}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 font-bold text-dark-burgundy">{log.spot_name}</td>
+                        <td className="px-4 py-3 text-slate-500">{log.details || '—'}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        ) : (
+          /* TAB 5: STUDENT ISSUE REPORTS */
+          <div className="space-y-4">
+            <div className="flex flex-col items-start justify-between gap-2 border-b border-slate-200 pb-2 sm:flex-row sm:items-center">
+              <div>
+                <h2 className="text-base font-bold text-slate-900">Student Issue Reports</h2>
+                <p className="text-xs text-slate-500">
+                  Flags submitted by students regarding closed spots, wrong hours, or broken sockets.
+                </p>
+              </div>
+              <span className="rounded-full bg-rose-50 px-3 py-1 text-xs font-bold text-rose-700 border border-rose-200">
+                {reports.length} Reports
+              </span>
+            </div>
+
+            {reports.length === 0 ? (
+              <div className="rounded-2xl border border-dashed border-slate-300 p-12 text-center bg-white">
+                <CheckCircle2 className="mx-auto h-8 w-8 text-emerald-600 mb-2" />
+                <p className="text-sm font-semibold text-slate-700">No issues reported!</p>
+                <p className="text-xs text-slate-500">All campus listings are currently clear.</p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {reports.map((report) => (
+                  <div
+                    key={report.id}
+                    className="flex flex-col justify-between rounded-2xl border border-rose-200 bg-white p-4 shadow-sm"
+                  >
+                    <div className="space-y-2">
+                      <div className="flex items-start justify-between gap-2">
+                        <h3 className="font-bold text-sm text-slate-900">{report.spot_name}</h3>
+                        <span className="rounded-md bg-rose-100 px-2 py-0.5 text-[10px] font-bold text-rose-800 border border-rose-200">
+                          {report.reason}
+                        </span>
+                      </div>
+                      <p className="text-xs text-slate-600 bg-rose-50/50 p-2.5 rounded-xl border border-rose-100">
+                        "{report.description || 'No additional details provided.'}"
+                      </p>
+                      <p className="text-[10px] text-slate-400 font-mono">
+                        Reported on {new Date(report.created_at).toLocaleDateString()}
+                      </p>
+                    </div>
+
+                    <div className="flex items-center justify-between pt-3 mt-3 border-t border-slate-100">
+                      <button
+                        onClick={() => handleDismissReport(report.id, report.spot_name)}
+                        className="rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-50 transition-colors"
+                      >
+                        Dismiss
+                      </button>
+                      <button
+                          onClick={() => {
+                            // 1. Find target spot with string-safe ID match or name fallback
+                            const targetSpot =
+                              approvedSpots.find((s) => String(s.id) === String(report.spot_id)) ||
+                              pendingSpots.find((s) => String(s.id) === String(report.spot_id)) ||
+                              approvedSpots.find((s) => s.name.trim().toLowerCase() === report.spot_name?.trim().toLowerCase());
+
+                            if (!targetSpot) {
+                              alert(`Could not find the spot "${report.spot_name}". It may have been deleted.`);
+                              return;
+                            }
+
+                            setResolvingReportId(report.id);
+
+                            // 2. Parse suggested coordinates
+                            const suggested = parseReportCoordinates(report.description);
+
+                            const finalLat = suggested ? suggested.lat : targetSpot.latitude;
+                            const finalLng = suggested ? suggested.lng : targetSpot.longitude;
+
+                            // 3. Open modal with the suggested coordinates directly pre-filled
+                            setEditingSpot(targetSpot);
+                            setEditFormData({
+                              name: targetSpot.name,
+                              category: targetSpot.category,
+                              description: targetSpot.description ?? '',
+                              location_description: targetSpot.location_description ?? '',
+                              latitude: String(finalLat),
+                              longitude: String(finalLng),
+                              hours: targetSpot.hours,
+                              budget_range: targetSpot.budget_range ?? '',
+                              has_outlets: Boolean(targetSpot.has_outlets),
+                              has_wifi: Boolean(targetSpot.has_wifi),
+                              has_aircon: Boolean(targetSpot.has_aircon),
+                              has_restroom: Boolean(targetSpot.has_restroom),
+                              is_shaded: Boolean(targetSpot.is_shaded),
+                              is_quiet: Boolean(targetSpot.is_quiet),
+                            });
+                          }}
+                          className="rounded-xl bg-dark-burgundy px-3.5 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-deep-maroon transition-colors"
+                        >
+                          Locate &amp; Fix
+                        </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
         )}
       </main>
+
+      {spotToDelete && (
+        <div className="fixed inset-0 z-[2200] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+          <div className="w-full max-w-sm rounded-2xl border border-slate-200 bg-white p-6 shadow-2xl text-center space-y-4">
+            <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-rose-100 text-rose-600">
+              <Trash2 className="h-6 w-6" />
+            </div>
+
+            <div>
+              <h3 className="text-base font-bold text-slate-900">Delete this spot?</h3>
+              <p className="mt-1 text-xs text-slate-500 leading-relaxed">
+                Are you sure you want to remove <strong className="text-slate-800 font-semibold">"{spotToDelete.name}"</strong>? This will delete it permanently and remove it from the campus map.
+              </p>
+            </div>
+
+            <div className="flex items-center justify-center gap-3 pt-2">
+              <button
+                type="button"
+                onClick={() => setSpotToDelete(null)}
+                className="flex-1 rounded-xl border border-slate-200 px-4 py-2.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={executeDelete}
+                className="flex-1 rounded-xl bg-rose-600 px-4 py-2.5 text-xs font-semibold text-white shadow-sm hover:bg-rose-700 active:scale-95 transition-all"
+              >
+                Yes, Delete
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      
+
+      {/* Spot Edit Dialog */}
       {editingSpot && editFormData && (
         <div className="fixed inset-0 z-[2100] flex items-center justify-center bg-black/50 p-3 sm:p-6">
           <form
@@ -839,6 +1179,7 @@ export function AdminDashboard({ isOpen, onClose, onSpotsUpdated }: AdminDashboa
                 onClick={() => {
                   setEditingSpot(null);
                   setEditFormData(null);
+                  setResolvingReportId(null);
                 }}
                 className="rounded-lg p-2 text-slate-500 hover:bg-slate-100"
                 aria-label="Close edit form"
@@ -846,6 +1187,16 @@ export function AdminDashboard({ isOpen, onClose, onSpotsUpdated }: AdminDashboa
                 <X className="h-4 w-4" aria-hidden="true" />
               </button>
             </div>
+
+            {/* 👇 ADDED HERE: Visual banner when fixing a report */}
+            {resolvingReportId && (
+              <div className="rounded-xl border border-rose-200 bg-rose-50 p-2.5 text-xs font-medium text-rose-800 flex items-center justify-between">
+                <span>📍 Applied suggested location from report:</span>
+                <span className="font-mono font-bold">
+                  {editFormData.latitude}, {editFormData.longitude}
+                </span>
+              </div>
+            )}
 
             <div className="grid gap-3 sm:grid-cols-2">
               <label className="text-xs font-semibold text-slate-700">
@@ -964,6 +1315,7 @@ export function AdminDashboard({ isOpen, onClose, onSpotsUpdated }: AdminDashboa
                 onClick={() => {
                   setEditingSpot(null);
                   setEditFormData(null);
+                  setResolvingReportId(null);
                 }}
                 className="rounded-lg border border-slate-200 px-4 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50"
               >

@@ -58,24 +58,29 @@ export function Navbar({
 }: NavbarProps) {
   return (
     <header className="cat-pattern-background brand-header sticky top-0 z-30 flex h-16 w-full items-center justify-between px-4 sm:px-6">
-      {/* Brand title & logo */}
-      <div className="flex items-center gap-3">
+       <div className="flex items-center gap-3">
         <a
           href="/"
-          className="group flex items-center gap-2.5 text-warm-cream focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-dark-burgundy focus-visible:ring-offset-2 rounded-lg"
+          className="group flex items-center gap-1.5 text-warm-cream focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-dark-burgundy focus-visible:ring-offset-2 rounded-lg"
           aria-label="Tambyte Home"
         >
-          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-deep-crimson text-white shadow-sm transition-transform duration-150 group-hover:scale-105">
-            <TambyteLogoMark />
+          {/* Logo Red (Snug fit) */}
+          <div className="flex h-9 w-10 shrink-0 items-center justify-center -translate-y-0.5 transition-transform duration-150 group-hover:scale-105">
+            <img
+              src="/logo-red.png"
+              alt="Tambyte Red Logo"
+              className="h-full w-full object-contain drop-shadow-sm"
+            />
           </div>
-          <div className="flex flex-col">
-            <span className="text-lg font-bold tracking-tight text-warm-cream leading-none">
+          {/* Clean Typography Lockup */}
+          <div className="flex flex-col justify-center">
+            <span className="text-xl font-bold tracking-normal text-white leading-none font-brand">
               Tambyte
             </span>
-            <span className="mt-0.5 hidden text-[11px] font-medium leading-none text-warm-cream sm:block">
+            <span className="text-[9.5px] font-semibold tracking-[0.14em] text-rose-200/90 mt-1 leading-none uppercase">
               Grab A Byte &amp; Tambay Maps
             </span>
-          </div>
+          </div>  
         </a>
       </div>
 

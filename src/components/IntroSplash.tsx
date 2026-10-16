@@ -39,6 +39,7 @@ export function IntroSplash({
 }: IntroSplashProps) {
   const prefersReducedMotion = useReducedMotion();
   const [hasEntered, setHasEntered] = useState(false);
+  const [isCrunching, setIsCrunching] = useState(false);
   const hasEnteredRef = useRef(false);
   const openAudioRef = useRef<HTMLAudioElement | null>(null);
   const chewAudioRef = useRef<HTMLAudioElement | null>(null);
@@ -103,14 +104,16 @@ export function IntroSplash({
     }
 
     hasEnteredRef.current = true;
-    setHasEntered(true);
+    setIsCrunching(true); // 1. Start the violent crunch jitter!
     void playAudio(openAudioRef.current, 'open');
 
+    // 2. After 260ms of teeth crunching, smoothly snap to the bitten logo!
     chewTimeoutRef.current = window.setTimeout(() => {
+      setHasEntered(true);
       void playAudio(chewAudioRef.current, 'chew');
-    }, INTRO_CONFIG.timing.CHEW_DELAY_MS);
+    }, 260);
 
-    exitTimeoutRef.current = window.setTimeout(onFinish, duration);
+    exitTimeoutRef.current = window.setTimeout(onFinish, duration + 260);
   };
 
   const { colors, timing } = INTRO_CONFIG;
@@ -157,25 +160,41 @@ export function IntroSplash({
               className="absolute inset-0 z-10 flex cursor-pointer flex-col items-center justify-center bg-transparent focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-inset focus-visible:ring-white"
               aria-label="Enter Tambyte"
             >
-              <motion.svg
-                viewBox="0 0 160 160"
-                className="h-36 w-36 fill-white sm:h-44 sm:w-44"
-                style={{ filter: `drop-shadow(0 0 22px ${colors.scarlet})` }}
-                initial={{ scale: 0.92 }}
-                animate={{ scale: [0.96, 1.04, 0.96] }}
-                transition={{ duration: 2, repeat: Infinity, ease: 'easeInOut' }}
-                aria-hidden="true"
-              >
-                <rect x="24" y="28" width="112" height="26" rx="13" />
-                <rect x="67" y="42" width="26" height="91" rx="13" />
-              </motion.svg>
-              <motion.span
-                className={`mt-8 rounded-full border ${colors.promptBorderClass} px-5 py-2 text-xs font-semibold uppercase tracking-[0.28em] ${colors.promptClass}`}
-                animate={{ opacity: [0.55, 1, 0.55], scale: [0.98, 1, 0.98] }}
-                transition={{ duration: 1.5, repeat: Infinity, ease: 'easeInOut' }}
-              >
-                Tap to byte
-              </motion.span>
+              {/* Soft Warm Radial Backdrop */}
+              <div className="relative flex flex-col items-center">
+                <div className="absolute -inset-8 rounded-full bg-gradient-to-r from-amber-500/10 via-rose-500/20 to-amber-500/10 blur-2xl" />
+
+                <motion.img
+                  src="/logo-whole.png"
+                  alt="Tambyte Whole Logo"
+                  className="relative h-60 w-60 object-contain sm:h-72 sm:w-72 drop-shadow-[0_20px_40px_rgba(0,0,0,0.6)]"
+                  initial={{ scale: 0.95, y: 0 }}
+                  animate={
+                    isCrunching
+                      ? {
+                          x: [-5, 6, -6, 5, -4, 4, -2, 0], // violent jitter shake
+                          y: [-3, 4, -4, 3, -2, 2, 0],
+                          rotate: [-3, 4, -4, 3, -1, 0],
+                          scale: [1, 0.9, 1.06, 0.92], // compress under bite pressure
+                        }
+                      : { scale: [0.97, 1.03, 0.97], y: [-4, 4, -4] }
+                  }
+                  transition={
+                    isCrunching
+                      ? { duration: 0.26, ease: 'easeInOut' }
+                      : { duration: 3, repeat: Infinity, ease: 'easeInOut' }
+                  }
+                />
+
+                <motion.span
+                  className="mt-3 flex items-center gap-2 rounded-full bg-warm-cream px-6 py-2 text-xs font-bold uppercase tracking-[0.2em] text-dark-burgundy shadow-2xl hover:scale-105 active:scale-95 transition-all cursor-pointer"
+                  animate={{ scale: [0.97, 1.03, 0.97] }}
+                  transition={{ duration: 2, repeat: Infinity, ease: 'easeInOut' }}
+                >
+                  <span className="h-1.5 w-1.5 rounded-full bg-deep-crimson" />
+                  <span>Tap to byte</span>
+                </motion.span>
+              </div>
             </button>
           ) : (
             <motion.div
@@ -185,44 +204,26 @@ export function IntroSplash({
               transition={{ type: 'spring', stiffness: 230, damping: 15, duration: 0.55 }}
             >
               <div className="relative">
-                <motion.svg
-                  viewBox="0 0 160 160"
-                  className="h-36 w-36 fill-white sm:h-44 sm:w-44"
-                  initial={{ scaleY: 1 }}
-                  animate={{ scaleY: chompScales }}
+                <motion.img
+                  src="/logo-bitten.png"
+                  alt="Tambyte Bitten Logo"
+                  className="h-60 w-60 object-contain sm:h-72 sm:w-72 drop-shadow-[0_25px_45px_rgba(0,0,0,0.7)]"
+                  initial={{ scale: 0.88, opacity: 0.8 }}
+                  animate={{ scale: [0.88, 1.12, 0.96, 1], opacity: 1 }}
                   transition={{
-                    duration: timing.CHOMP_DURATION_MS / 1000,
-                    delay: timing.CHEW_DELAY_MS / 1000,
-                    ease: 'easeInOut',
-                    times: [0, 0.14, 0.28, 0.42, 0.56, 0.7, 0.84, 1],
+                    type: 'spring',
+                    stiffness: 340,
+                    damping: 18,
+                    duration: 0.6,
                   }}
-                  style={{
-                    transformOrigin: 'center center',
-                    filter: `drop-shadow(0 0 22px ${colors.scarlet})`,
-                  }}
-                  aria-hidden="true"
-                >
-                  <rect x="24" y="28" width="112" height="26" rx="13" />
-                  <rect x="67" y="42" width="26" height="91" rx="13" />
-                </motion.svg>
-                <motion.div
-                  className={`pointer-events-none absolute inset-y-0 left-0 w-7 blur-sm ${colors.sweepClass}`}
-                  initial={{ x: '-140%', opacity: 0 }}
-                  animate={{ x: '520%', opacity: [0, 1, 0] }}
-                  transition={{
-                    duration: 0.65,
-                    delay: timing.CHEW_DELAY_MS / 1000 + 0.2,
-                    ease: 'easeInOut',
-                  }}
-                  aria-hidden="true"
                 />
               </div>
 
-              <div className="mt-2 flex h-12 overflow-hidden" role="img" aria-label="Tambyte">
+              <div className="mt-2 flex h-14 sm:h-16 overflow-hidden items-center" role="img" aria-label="Tambyte">
                 {'Tambyte'.split('').map((letter, index) => (
                   <span key={`${letter}-${index}`} className="overflow-hidden">
                     <motion.span
-                      className={`inline-block text-4xl font-bold tracking-tight sm:text-5xl ${colors.wordmarkClass}`}
+                      className={`font-brand inline-block text-5xl font-normal tracking-wide sm:text-6xl leading-none pb-1 ${colors.wordmarkClass}`}
                       initial={{ y: '110%', opacity: 0 }}
                       animate={{ y: 0, opacity: 1 }}
                       transition={{
@@ -238,13 +239,14 @@ export function IntroSplash({
                 ))}
               </div>
 
+              {/* Tightly coupled subtitle */}
               <motion.p
-                className={`mt-3 text-center text-[10px] font-medium uppercase tracking-[0.3em] sm:text-xs ${colors.taglineClass}`}
-                initial={{ opacity: 0, y: 8 }}
+                className={`mt-0.5 text-center text-[10px] font-semibold uppercase tracking-[0.28em] sm:text-xs ${colors.taglineClass}`}
+                initial={{ opacity: 0, y: 4 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{
                   duration: 0.5,
-                  delay: timing.CHEW_DELAY_MS / 1000 + 0.85,
+                  delay: timing.CHEW_DELAY_MS / 1000 + 0.75,
                   ease: 'easeOut',
                 }}
               >

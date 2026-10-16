@@ -88,10 +88,11 @@ export function getOpeningStatus(hours: string | null | undefined, now = new Dat
 
 export async function getWalkingRoute(
   destination: Pick<SpotRow, 'latitude' | 'longitude'>,
+  origin: Pick<SpotRow, 'latitude' | 'longitude'> = BULSU_MENESES_CAMPUS,
   signal?: AbortSignal,
 ): Promise<WalkingRoute> {
   const coordinates = [
-    `${BULSU_MENESES_CAMPUS.longitude},${BULSU_MENESES_CAMPUS.latitude}`,
+    `${origin.longitude},${origin.latitude}`, // Uses live GPS origin!
     `${destination.longitude},${destination.latitude}`,
   ].join(';');
   const params = new URLSearchParams({

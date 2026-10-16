@@ -1,5 +1,17 @@
 @import "tailwindcss";
 
+@font-face {
+  font-family: 'Bargain';
+  src: url('/fonts/bargain.otf') format('opentype');
+  font-weight: normal;
+  font-style: normal;
+}
+
+/* Custom class for your brand titles */
+.font-brand {
+  font-family: 'Bargain', sans-serif;
+}
+
 @theme {
   --color-deep-crimson: #970023;
   --color-dark-burgundy: #460B12;

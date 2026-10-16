@@ -322,7 +322,10 @@ interface MapAreaProps {
   isFilterOpen: boolean;
   onToggleFilter: () => void;
   onShareSpotClick?: () => void;
+  onReportSpotClick?: (location: SpotRow) => void;
+  onGetDirections?: (location: SpotRow) => void;
 }
+
 function MapResizeHandler() {
   const map = useMap();
 
@@ -442,6 +445,8 @@ export function MapArea({
   isFilterOpen,
   onToggleFilter,
   onShareSpotClick,
+  onReportSpotClick,
+  onGetDirections,
 }: MapAreaProps) {
   const validLocations = locations.filter(hasValidCoordinates);
   const markerRefs = useRef(new Map<string, L.Marker>());
@@ -502,14 +507,14 @@ export function MapArea({
         <MapContainer
           ref={mapRef}
           center={BULSU_MENESES_COORDINATES}
-          zoom={16} // Snaps directly to street/campus view on load
-          minZoom={16} // Zooming out shows the clean 1.2km circle
-          maxZoom={18} // Street-level detail
+          zoom={16}
+          minZoom={15}
+          maxZoom={18}
           maxBounds={CAMPUS_VICINITY_BOUNDS}
           maxBoundsViscosity={0.8}
           scrollWheelZoom
           zoomControl={false}
-          className="tambyte-map min-h-0 w-full flex-1"
+          className="h-full min-h-[420px] w-full sm:min-h-[500px]"
           aria-label={`Map centered on ${BULSU_MENESES_CAMPUS.name}`}
         >
           <MapResizeHandler />
@@ -571,27 +576,44 @@ export function MapArea({
               }}
             >
               <Popup>
-                <strong>{location.name}</strong>
-                {location.category && (
-                  <>
-                    <br />
-                    {location.category}
-                  </>
-                )}
-                {location.location_description && (
-                  <>
-                    <br />
-                    {location.location_description}
-                  </>
-                )}
-                <br />
-                <button
-                  type="button"
-                  onClick={() => onViewDetails(location)}
-                  className="mt-1 font-semibold text-dark-burgundy"
-                >
-                  View details
-                </button>
+                <div className="p-1 space-y-2.5 min-w-[170px]">
+                  <div>
+                    <strong className="text-sm font-bold text-slate-900 block leading-tight">{location.name}</strong>
+                    {location.category && (
+                      <span className="inline-block rounded bg-gold/25 px-2 py-0.5 text-[10px] font-bold text-deep-maroon mt-1">
+                        {location.category}
+                      </span>
+                    )}
+                    {location.location_description && (
+                      <p className="text-[11px] text-slate-500 mt-1">{location.location_description}</p>
+                    )}
+                  </div>
+
+                  {/* Action Buttons Hub */}
+                  <div className="flex flex-col gap-1.5 pt-2 border-t border-slate-100">
+                    <button
+                      type="button"
+                      onClick={() => onViewDetails(location)}
+                      className="w-full rounded-xl bg-dark-burgundy px-3.5 py-2 text-xs font-semibold text-white shadow-sm hover:bg-deep-maroon transition-colors text-center"
+                    >
+                      View Details
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => onGetDirections?.(location)}
+                      className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-100 transition-colors text-center"
+                    >
+                      Get Directions
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => onReportSpotClick?.(location)}
+                      className="w-full rounded-xl border border-rose-200 bg-rose-50/60 px-3.5 py-1.5 text-xs font-semibold text-rose-700 hover:bg-rose-100 transition-colors text-center"
+                    >
+                      Report Issue
+                    </button>
+                  </div>
+                </div>
               </Popup>
             </Marker>
           ))}

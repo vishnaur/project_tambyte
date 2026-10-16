@@ -13,6 +13,7 @@ import type { SpotRow } from '../types/database';
 import { calculateDistanceKm, getWalkingRoute, type WalkingRoute } from '../utils/location';
 import { AdminDashboard } from '../components/AdminDashboard';
 import { ContributeSpotModal } from '../components/ContributeSpotModal';
+import { ReportModal } from '../components/ReportModal';
 
 export default function HomePage() {
   const [isMobileFilterOpen, setIsMobileFilterOpen] = useState(false);
@@ -32,7 +33,27 @@ export default function HomePage() {
   const [reloadLocations, setReloadLocations] = useState(0);
   const [isAdminDashboardOpen, setIsAdminDashboardOpen] = useState(false);
   const [isContributeModalOpen, setIsContributeModalOpen] = useState(false);
+  const [activeModal, setActiveModal] = useState<'admin' | 'report' | null>(null);
+  const [userGps, setUserGps] = useState<{ latitude: number; longitude: number } | null>(null);
 
+  // Get user's live GPS location for routing & distance
+  useEffect(() => {
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        (pos) => {
+          setUserGps({ latitude: pos.coords.latitude, longitude: pos.coords.longitude });
+        },
+        () => {
+          setUserGps(BULSU_MENESES_CAMPUS); // Fallback to campus if denied
+        },
+        { enableHighAccuracy: true }
+      );
+    } else {
+      setUserGps(BULSU_MENESES_CAMPUS);
+    }
+  }, []);
+  
+  
   useEffect(() => {
     if (!selectedSpot || directionsSpotId !== selectedSpot.id) {
       setWalkingRoute(null);
@@ -47,7 +68,7 @@ export default function HomePage() {
     setDirectionsLoading(true);
     setDirectionsError(null);
 
-    getWalkingRoute(selectedSpot, controller.signal)
+    getWalkingRoute(selectedSpot, userGps || BULSU_MENESES_CAMPUS, controller.signal)
       .then((route) => {
         if (isCurrentRequest) setWalkingRoute(route);
       })
@@ -69,7 +90,6 @@ export default function HomePage() {
   }, [directionsRetry, directionsSpotId, selectedSpot]);
   
   // Modals & Auth State
-  const [activeModal, setActiveModal] = useState<'admin' | 'report' | null>(null);
   const [isAdmin, setIsAdmin] = useState(false);
 
   // Check if admin is already logged in on initial load
@@ -171,13 +191,6 @@ export default function HomePage() {
     setIsMobileFilterOpen(false);
   };
 
-  const handleViewDetails = (location: SpotRow) => {
-    setSelectedSpot(location);
-    setIsDetailOpen(true);
-    setDirectionsSpotId(null);
-    setIsMobileFilterOpen(false);
-  };
-
   const handleCloseDetail = () => {
     setIsDetailOpen(false);
     setSelectedSpot(null);
@@ -200,6 +213,20 @@ export default function HomePage() {
   const handleAdminLogout = async () => {
     await supabase.auth.signOut();
     setIsAdmin(false);
+  };
+  
+  const handleViewDetails = (location: SpotRow) => {
+    setSelectedSpot(location);
+    setIsDetailOpen(true);
+    setDirectionsSpotId(null);
+    setIsMobileFilterOpen(false);
+  };
+
+  const handleGetDirections = (location: SpotRow) => {
+    setSelectedSpot(location);
+    setIsDetailOpen(true);
+    setDirectionsSpotId(location.id);
+    setIsMobileFilterOpen(false);
   };
 
   return (
@@ -256,6 +283,11 @@ export default function HomePage() {
 
         <MapArea
           onShareSpotClick={() => setIsContributeModalOpen(true)}
+          onReportSpotClick={(location) => {
+            setSelectedSpot(location);
+            setActiveModal('report');
+          }}
+          onGetDirections={handleGetDirections} // <-- Add this line!
           locations={filteredLocations}
           totalLocationCount={locations.length}
           invalidCoordinateCount={categoryLocations.length - filteredLocations.length}
@@ -278,7 +310,7 @@ export default function HomePage() {
           spot={selectedSpot}
           distanceKm={
             selectedSpot
-              ? calculateDistanceKm(BULSU_MENESES_CAMPUS, selectedSpot)
+              ? calculateDistanceKm(userGps || BULSU_MENESES_CAMPUS, selectedSpot)
               : null
           }
           directionsRequested={directionsSpotId === selectedSpot?.id}
@@ -311,41 +343,13 @@ export default function HomePage() {
         }}
       />
 
-      {/* Placeholder Modal: Report an Issue Notice */}
-      {activeModal === 'report' && (
-        createPortal(
-          <div
-            className="fixed inset-0 z-[3000] flex items-center justify-center bg-black/50 p-4 backdrop-blur-xs"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="report-issue-title"
-          >
-            <div className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-xl border border-slate-200">
-              <div className="flex items-start justify-between">
-                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-warm-cream text-dark-burgundy">
-                  <AlertCircle className="h-5 w-5" aria-hidden="true" />
-                </div>
-              </div>
-              <h3 id="report-issue-title" className="mt-4 text-base font-semibold text-slate-900">
-                Report an Issue
-              </h3>
-              <p className="mt-2 text-xs sm:text-sm text-slate-600 leading-relaxed">
-                Students can report incorrect hours, closed areas, or missing power outlets.
-              </p>
-              <div className="mt-5">
-                <button
-                  type="button"
-                  onClick={() => setActiveModal(null)}
-                  className="w-full min-h-[44px] rounded-xl bg-deep-maroon px-4 py-2 text-xs font-semibold text-white hover:bg-dark-burgundy transition-colors"
-                >
-                  Close
-                </button>
-              </div>
-            </div>
-          </div>,
-          document.body,
-        )
-      )}
+      {/* Real Working Student Report Modal */}
+      <ReportModal
+        isOpen={activeModal === 'report'}
+        onClose={() => setActiveModal(null)}
+        spots={locations}
+        preselectedSpot={selectedSpot}
+      />
 
       {/* Student Spot Contribution Modal */}
       <ContributeSpotModal
