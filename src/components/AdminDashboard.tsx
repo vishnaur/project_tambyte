@@ -133,13 +133,13 @@ export function AdminDashboard({ isOpen, onClose, onSpotsUpdated }: AdminDashboa
   }, [editSpotImage]);
 
   useEffect(() => {
-    if (!filterOpenNow) return;
+    if (!isOpen || activeTab !== 'approved') return;
 
     const intervalId = window.setInterval(() => {
       setOpenStatusRevision((revision) => revision + 1);
     }, 60_000);
     return () => window.clearInterval(intervalId);
-  }, [filterOpenNow]);
+  }, [activeTab, isOpen]);
 
   useEffect(() => {
     if (isOpen) {
@@ -874,7 +874,12 @@ export function AdminDashboard({ isOpen, onClose, onSpotsUpdated }: AdminDashboa
                       <div className="flex items-start justify-between gap-2">
                         <div>
                           <div className="flex items-center gap-1.5">
-                            <span className="h-2 w-2 rounded-full bg-emerald-500 shrink-0" title="Live on Map" />
+                            <span
+                              className={`h-2 w-2 shrink-0 rounded-full ${
+                                getOpeningStatus(spot.hours) === 'open' ? 'bg-emerald-500' : 'bg-slate-400'
+                              }`}
+                              title={getOpeningStatus(spot.hours) === 'open' ? 'Open now' : 'Not open'}
+                            />
                             <h3 className="font-bold text-sm text-slate-900 leading-snug">{spot.name}</h3>
                           </div>
                           {spot.location_description && (
