@@ -326,6 +326,63 @@ interface MapAreaProps {
   onGetDirections?: (location: SpotRow) => void;
 }
 
+interface SpotPopupContentProps {
+  location: SpotRow;
+  onViewDetails: (location: SpotRow) => void;
+  onGetDirections?: (location: SpotRow) => void;
+}
+
+function SpotPopupContent({
+  location,
+  onViewDetails,
+  onGetDirections,
+}: SpotPopupContentProps) {
+  const [isImageAvailable, setIsImageAvailable] = useState(Boolean(location.image_url));
+
+  useEffect(() => {
+    setIsImageAvailable(Boolean(location.image_url));
+  }, [location.image_path, location.image_url]);
+
+  return (
+    <div
+      className="overflow-hidden rounded-xl"
+      style={{ width: 'clamp(150px, 48vw, 200px)' }}
+    >
+      {isImageAvailable && location.image_url && (
+        <div className="h-20 w-full overflow-hidden bg-slate-100">
+          <SignedSpotImage
+            imagePath={location.image_path}
+            imageUrl={location.image_url}
+            alt={location.name}
+            className="h-full w-full object-cover"
+            onUnavailable={() => setIsImageAvailable(false)}
+          />
+        </div>
+      )}
+
+      <div className="space-y-1.5 px-1 pt-2">
+        <strong className="block break-words border-l-2 border-gold pl-2 text-[13px] font-bold leading-snug text-slate-900">
+          {location.name}
+        </strong>
+        <button
+          type="button"
+          onClick={() => onViewDetails(location)}
+          className="min-h-10 w-full rounded-xl bg-dark-burgundy px-3 py-2 text-xs font-semibold text-white shadow-sm transition-colors hover:bg-deep-maroon focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-dark-burgundy focus-visible:ring-offset-2"
+        >
+          View Details
+        </button>
+        <button
+          type="button"
+          onClick={() => onGetDirections?.(location)}
+          className="min-h-10 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-700 transition-colors hover:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-dark-burgundy focus-visible:ring-offset-2"
+        >
+          Get Directions
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function MapResizeHandler() {
   const map = useMap();
 
@@ -663,51 +720,12 @@ export function MapArea({
                 click: () => onLocateLocation(location),
               }}
             >
-              <Popup autoPanPadding={[24, 56]} closeOnClick>
-                <div className="relative isolate min-w-[170px] space-y-2.5 overflow-hidden rounded-lg p-1">
-                  {location.image_url && (
-                    <div className="pointer-events-none absolute -inset-x-1 -top-1 z-0 h-32 overflow-hidden" aria-hidden="true">
-                      <SignedSpotImage
-                        imagePath={location.image_path}
-                        imageUrl={location.image_url}
-                        alt=""
-                        className="h-full w-full object-cover opacity-85"
-                      />
-                      <div className="absolute inset-0 bg-gradient-to-b from-white/0 via-white/10 to-white" />
-                    </div>
-                  )}
-                  <div className="relative z-10">
-                    <strong className="text-sm font-bold text-slate-900 block leading-tight">{location.name}</strong>
-                    {location.category && (
-                      <span className="inline-block rounded bg-gold/25 px-2 py-0.5 text-[10px] font-bold text-deep-maroon mt-1">
-                        {location.category}
-                      </span>
-                    )}
-                    {location.location_description && (
-                      <p className="mt-1.5 border-l-2 border-gold/80 pl-2 text-[11px] text-slate-700">
-                        {location.location_description}
-                      </p>
-                    )}
-                  </div>
-
-                  {/* Action Buttons Hub */}
-                  <div className="relative z-10 flex flex-col gap-1.5 border-t border-slate-100 pt-2">
-                    <button
-                      type="button"
-                      onClick={() => onViewDetails(location)}
-                      className="w-full rounded-xl bg-dark-burgundy px-3.5 py-2 text-xs font-semibold text-white shadow-sm hover:bg-deep-maroon transition-colors text-center"
-                    >
-                      View Details
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => onGetDirections?.(location)}
-                      className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-100 transition-colors text-center"
-                    >
-                      Get Directions
-                    </button>
-                  </div>
-                </div>
+              <Popup autoPanPadding={[20, 48]} closeOnClick maxWidth={220} minWidth={0}>
+                <SpotPopupContent
+                  location={location}
+                  onViewDetails={onViewDetails}
+                  onGetDirections={onGetDirections}
+                />
               </Popup>
             </Marker>
           ))}

@@ -7,6 +7,7 @@ const INTRO_CONFIG = {
     chew: '/sounds/monster-chew.mp3',
   },
   timing: {
+    BITE_DELAY_MS: 260,
     CHEW_DELAY_MS: 400,
     EXIT_MS: 2500,
     CHOMP_DURATION_MS: 1800,
@@ -107,13 +108,16 @@ export function IntroSplash({
     setIsCrunching(true); // 1. Start the violent crunch jitter!
     void playAudio(openAudioRef.current, 'open');
 
-    // 2. After 260ms of teeth crunching, smoothly snap to the bitten logo!
+    // Switch to the bitten logo and play the chew sound together.
     chewTimeoutRef.current = window.setTimeout(() => {
       setHasEntered(true);
       void playAudio(chewAudioRef.current, 'chew');
-    }, 260);
+    }, timing.BITE_DELAY_MS);
 
-    exitTimeoutRef.current = window.setTimeout(onFinish, duration + 260);
+    exitTimeoutRef.current = window.setTimeout(
+      onFinish,
+      duration + timing.BITE_DELAY_MS,
+    );
   };
 
   const { colors, timing } = INTRO_CONFIG;

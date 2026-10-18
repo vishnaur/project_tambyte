@@ -105,6 +105,10 @@ export function SpotDetailPanel({
             <h2
               id="spot-detail-title"
               className="mt-2 text-lg font-bold tracking-tight text-slate-900 sm:text-xl"
+              style={{
+                textShadow:
+                  '-1px -1px 0 #fff, 0 -1px 0 #fff, 2px -1px 0 #fff, -1px 0 0 #fff, 1px 0 0 #fff, -1px 1px 0 #fff, 0 1px 0 #fff, 1px 1px 0 #fff',
+              }}
             >
               {spot.name}
             </h2>

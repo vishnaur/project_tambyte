@@ -6,6 +6,7 @@ interface SignedSpotImageProps {
   imageUrl?: string | null;
   alt: string;
   className: string;
+  onUnavailable?: () => void;
 }
 
 export function SignedSpotImage({
@@ -13,6 +14,7 @@ export function SignedSpotImage({
   imageUrl,
   alt,
   className,
+  onUnavailable,
 }: SignedSpotImageProps) {
   const [src, setSrc] = useState(imageUrl ?? null);
   const retriedRef = useRef(false);
@@ -32,13 +34,17 @@ export function SignedSpotImage({
       onError={() => {
         if (!imagePath || retriedRef.current) {
           setSrc(null);
+          onUnavailable?.();
           return;
         }
 
         retriedRef.current = true;
         void createSignedSpotImageUrl(imagePath)
           .then(setSrc)
-          .catch(() => setSrc(null));
+          .catch(() => {
+            setSrc(null);
+            onUnavailable?.();
+          });
       }}
     />
   );
