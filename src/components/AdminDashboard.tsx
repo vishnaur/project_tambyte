@@ -207,7 +207,6 @@ export function AdminDashboard({ isOpen, onClose, onSpotsUpdated }: AdminDashboa
       .from('spots')
       .update({
         approved: true,
-        is_active: true,
         approved_by: user.id,
         approved_at: new Date().toISOString(),
       })
@@ -413,7 +412,6 @@ export function AdminDashboard({ isOpen, onClose, onSpotsUpdated }: AdminDashboa
           ...formData,
           image_path: imagePath,
           approved: true,
-          is_active: true,
         },
       ]);
       if (error) throw error;

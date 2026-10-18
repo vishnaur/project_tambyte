@@ -656,7 +656,7 @@ export function MapArea({
           closePopupOnClick
           scrollWheelZoom
           zoomControl={false}
-          className="h-full min-h-[420px] w-full sm:min-h-[500px]"
+          className="h-full min-h-[420px] w-full flex-1 sm:min-h-[500px]"
           aria-label={`Map centered on ${BULSU_MENESES_CAMPUS.name}`}
         >
           <MapResizeHandler />
