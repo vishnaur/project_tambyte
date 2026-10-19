@@ -30,9 +30,7 @@ function ReportMapPicker({ coords, onPick }: { coords: [number, number]; onPick:
 }
 
 export function ReportModal({ isOpen, onClose, spots, preselectedSpot }: ReportModalProps) {
-  // Put this right here!
-  if (!isOpen) return null;
-
+  // 1. All hooks run first (follows React Rules of Hooks)
   const [selectedSpotId, setSelectedSpotId] = useState<string>(preselectedSpot?.id || '');
   const [reason, setReason] = useState<string>(REPORT_REASONS[0]);
   const [description, setDescription] = useState('');
@@ -58,6 +56,9 @@ export function ReportModal({ isOpen, onClose, spots, preselectedSpot }: ReportM
     }
   }, [preselectedSpot, isOpen]);
 
+  // 2. Early return moved BELOW all hooks!
+  if (!isOpen) return null;
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     const spot = spots.find((s) => s.id === selectedSpotId) || preselectedSpot;
@@ -68,7 +69,6 @@ export function ReportModal({ isOpen, onClose, spots, preselectedSpot }: ReportM
 
     setIsSubmitting(true);
     try {
-      // If "Wrong Location", attach the GPS coordinates to the report details
       const finalDescription = reason === 'Wrong Location'
         ? `[Suggested Correct Coordinates: Lat ${suggestedLat.toFixed(5)}, Lng ${suggestedLng.toFixed(5)}] ${description.trim()}`
         : description.trim();
@@ -111,7 +111,8 @@ export function ReportModal({ isOpen, onClose, spots, preselectedSpot }: ReportM
 
         {isSuccess ? (
           <div className="py-8 text-center space-y-4">
-            <CheckCircle className="mx-auto h-12 w-12 text-emerald-600" />s
+            {/* Stray 's' deleted here! */}
+            <CheckCircle className="mx-auto h-12 w-12 text-emerald-600" />
             <h3 className="text-base font-bold text-slate-900">Report Submitted</h3>
             <p className="text-xs text-slate-600 max-w-xs mx-auto">
               Thank you! Our campus admins have been notified and will verify this spot.
@@ -128,7 +129,6 @@ export function ReportModal({ isOpen, onClose, spots, preselectedSpot }: ReportM
           </div>
         ) : (
           <form onSubmit={handleSubmit} className="mt-4 space-y-3.5">
-            {/* Spot Selector */}
             <div>
               <label className="block text-xs font-semibold text-slate-700">Which spot has an issue?</label>
               <select
@@ -146,7 +146,6 @@ export function ReportModal({ isOpen, onClose, spots, preselectedSpot }: ReportM
               </select>
             </div>
 
-            {/* Issue Reason */}
             <div>
               <label className="block text-xs font-semibold text-slate-700">Issue Type</label>
               <select
@@ -162,7 +161,6 @@ export function ReportModal({ isOpen, onClose, spots, preselectedSpot }: ReportM
               </select>
             </div>
 
-            {/* IF WRONG LOCATION: Show Interactive Map Picker */}
             {reason === 'Wrong Location' && (
               <div className="space-y-1.5 rounded-xl border border-rose-200 bg-rose-50/40 p-3">
                 <div className="flex items-center justify-between">
@@ -196,7 +194,6 @@ export function ReportModal({ isOpen, onClose, spots, preselectedSpot }: ReportM
               </div>
             )}
 
-            {/* Description */}
             <div>
               <label className="block text-xs font-semibold text-slate-700">
                 Details / What's wrong? <span className="text-rose-600">*</span>

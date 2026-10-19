@@ -8,10 +8,18 @@ import {
   Tags,
   Clock3,
   Utensils,
+  Wifi,
+  Zap,
+  Wind,
+  Bath,
+  TreePine,
+  VolumeX,
+  Footprints,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import type { SpotRow } from '../types/database';
 import { getOpeningStatus } from '../utils/location';
+import { BULSU_MENESES_CAMPUS } from '../constants/locations';
 
 interface FilterPanelProps {
   className?: string;
@@ -35,6 +43,36 @@ const MAIN_CATEGORIES: Array<{ label: string; value: string; Icon: LucideIcon }>
   { label: 'Other', value: 'Other', Icon: Ellipsis },
 ];
 
+// Calculates walking minutes (assumes standard ~80 meters/minute walking speed)
+function calculateWalkMinutes(lat1: number, lon1: number, lat2: number, lon2: number): number {
+  const R = 6371e3; // Earth radius in meters
+  const φ1 = (lat1 * Math.PI) / 180;
+  const φ2 = (lat2 * Math.PI) / 180;
+  const Δφ = ((lat2 - lat1) * Math.PI) / 180;
+  const Δλ = ((lon2 - lon1) * Math.PI) / 180;
+
+  const a =
+    Math.sin(Δφ / 2) * Math.sin(Δφ / 2) +
+    Math.cos(φ1) * Math.cos(φ2) * Math.sin(Δλ / 2) * Math.sin(Δλ / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  const meters = R * c;
+
+  const minutes = Math.round(meters / 80);
+  return Math.max(1, minutes); // Minimum 1 min
+}
+
+// Retrieves up to 3 amenity icons tagged on this spot
+function getSpotAmenities(location: SpotRow) {
+  const list: Array<{ label: string; Icon: LucideIcon }> = [];
+  if (location.has_wifi) list.push({ label: 'Wi-Fi', Icon: Wifi });
+  if (location.has_outlets) list.push({ label: 'Outlets', Icon: Zap });
+  if (location.has_aircon) list.push({ label: 'Aircon', Icon: Wind });
+  if (location.has_restroom) list.push({ label: 'Restroom', Icon: Bath });
+  if (location.is_shaded) list.push({ label: 'Shaded', Icon: TreePine });
+  if (location.is_quiet) list.push({ label: 'Quiet', Icon: VolumeX });
+  return list.slice(0, 3);
+}
+
 export function FilterPanel({
   className = '',
   id,
@@ -50,7 +88,15 @@ export function FilterPanel({
   const extraCategories = categories
     .filter((category) => !MAIN_CATEGORIES.some((option) => option.value === category))
     .map((category) => ({ label: category, value: category, Icon: Tags }));
-  const categoryOptions = [...MAIN_CATEGORIES, ...extraCategories];
+
+  // Keep all standard categories + extras, and push 'Other' to the very end
+  const withoutOther = MAIN_CATEGORIES.filter((c) => c.value !== 'Other');
+  const otherCategory = MAIN_CATEGORIES.find((c) => c.value === 'Other') ?? {
+    label: 'Other',
+    value: 'Other',
+    Icon: Ellipsis,
+  };
+  const categoryOptions = [...withoutOther, ...extraCategories, otherCategory];
   const openLocations = locations.filter((location) => getOpeningStatus(location.hours) === 'open');
   const categoryLocations = selectedCategory === '__all__'
     ? locations
@@ -72,59 +118,65 @@ export function FilterPanel({
         </p>
       </div>
 
-      <nav aria-label="Place categories" className="shrink-0">
-        <h3 className="mb-2 px-2 text-[10px] font-semibold uppercase tracking-wider text-slate-500">
-          Browse places
-        </h3>
-        <ul className="space-y-1">
-          {categoryOptions.map(({ label, value, Icon }) => {
-            const isSelected = selectedCategory === value;
-            const count = value === '__all__'
-              ? locations.length
-              : locations.filter((location) => location.category?.trim() === value).length;
+      <nav aria-label="Place categories" className="shrink-0 space-y-2">
+        <div className="flex items-center justify-between px-1">
+          <label htmlFor="category-select" className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">
+            Browse Category
+          </label>
+          <span className="rounded-full bg-gold/30 px-2 py-0.5 text-[10px] font-bold text-deep-maroon">
+            {locations.length} total
+          </span>
+        </div>
 
-            return (
-              <li key={value}>
-                <button
-                  type="button"
-                  onClick={() => onCategoryChange(value)}
-                  aria-current={isSelected ? 'page' : undefined}
-                  className={`flex min-h-10 w-full items-center gap-3 rounded-xl px-3 text-left text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-dark-burgundy ${
-                    isSelected
-                      ? 'bg-gold/35 font-semibold text-deep-maroon'
-                      : 'text-slate-700 hover:bg-gold/15'
-                  }`}
-                >
-                  <Icon className="h-4 w-4 shrink-0 text-dark-burgundy" aria-hidden="true" />
-                  <span className="min-w-0 flex-1 truncate">{label}</span>
-                  <span className={`min-w-6 rounded-full px-1.5 py-0.5 text-center text-[10px] ${
-                    isSelected ? 'bg-gold/50 text-deep-maroon' : 'bg-white/70 text-slate-500'
-                  }`}>
-                    {count}
-                  </span>
-                </button>
-              </li>
-            );
-          })}
-        </ul>
+        {/* Compact Category Dropdown */}
+        <div className="relative">
+          <select
+            id="category-select"
+            value={selectedCategory}
+            onChange={(e) => onCategoryChange(e.target.value)}
+            className="w-full appearance-none rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 pr-8 text-xs font-semibold text-deep-maroon shadow-sm transition-colors focus:border-dark-burgundy focus:outline-none focus:ring-1 focus:ring-dark-burgundy cursor-pointer"
+          >
+            {categoryOptions.map(({ label, value }) => {
+              const count =
+                value === '__all__'
+                  ? locations.length
+                  : locations.filter((loc) => loc.category?.trim() === value).length;
 
-        <div className="my-3 border-t border-dark-burgundy/10" />
+              return (
+                <option key={value} value={value}>
+                  {label} ({count})
+                </option>
+              );
+            })}
+          </select>
+          {/* Custom dropdown chevron arrow */}
+          <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-3 text-dark-burgundy">
+            <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
+            </svg>
+          </div>
+        </div>
 
+        {/* Open Now Filter Toggle */}
         <button
           type="button"
           onClick={() => onOpenNowChange(!openNowFilter)}
           aria-pressed={openNowFilter}
-          className={`flex min-h-10 w-full items-center gap-3 rounded-xl px-3 text-left text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-dark-burgundy ${
+          className={`flex w-full items-center justify-between rounded-xl border px-3 py-2 text-xs font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-dark-burgundy ${
             openNowFilter
-              ? 'bg-gold/35 font-semibold text-deep-maroon'
-              : 'text-slate-700 hover:bg-gold/15'
+              ? 'border-emerald-300 bg-emerald-50 text-emerald-800 shadow-sm'
+              : 'border-slate-200 bg-white/70 text-slate-700 hover:bg-gold/15'
           }`}
         >
-          <Clock3 className="h-4 w-4 shrink-0 text-dark-burgundy" aria-hidden="true" />
-          <span className="min-w-0 flex-1">Open Now</span>
-          <span className={`min-w-6 rounded-full px-1.5 py-0.5 text-center text-[10px] ${
-            openNowFilter ? 'bg-gold/50 text-deep-maroon' : 'bg-white/70 text-slate-500'
-          }`}>
+          <span className="flex items-center gap-2">
+            <Clock3 className={`h-3.5 w-3.5 ${openNowFilter ? 'text-emerald-600' : 'text-dark-burgundy'}`} />
+            Open Now Only
+          </span>
+          <span
+            className={`rounded-full px-1.5 py-0.5 text-[10px] ${
+              openNowFilter ? 'bg-emerald-200 text-emerald-900' : 'bg-slate-100 text-slate-600'
+            }`}
+          >
             {openLocations.length}
           </span>
         </button>
@@ -158,6 +210,7 @@ export function FilterPanel({
                   location.longitude >= -180 &&
                   location.longitude <= 180;
                 const isSelected = selectedSpotId === location.id;
+                const amenities = getSpotAmenities(location);
 
                 return (
                   <li key={location.id}>
@@ -181,16 +234,53 @@ export function FilterPanel({
                           </span>
                         )}
                       </span>
+
                       {!hasSelectedCategory && (
                         <span className="mt-1 inline-flex rounded-full bg-gold/20 px-2 py-0.5 text-[10px] font-semibold text-dark-burgundy">
                           {location.category}
                         </span>
                       )}
-                      <span className="mt-1 block text-xs text-slate-600">
-                        {hasCoordinates
-                          ? location.location_description || 'Tap to view on map'
-                          : 'Map location unavailable'}
-                      </span>
+
+                      {/* Walk minutes, Budget, and up to 3 amenity icons */}
+                      <div className="mt-2.5 flex items-center justify-between gap-1 border-t border-slate-100 pt-2 text-[11px]">
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          {hasCoordinates && (
+                            <span className="inline-flex items-center gap-1 font-medium text-dark-burgundy">
+                              <Footprints className="h-3.5 w-3.5 text-gold shrink-0" />
+                              {calculateWalkMinutes(
+                                BULSU_MENESES_CAMPUS.latitude,
+                                BULSU_MENESES_CAMPUS.longitude,
+                                Number(location.latitude),
+                                Number(location.longitude),
+                              )}{' '}
+                              min walk
+                            </span>
+                          )}
+
+                          {location.budget_range && (
+                            <>
+                              <span className="text-slate-300">·</span>
+                              <span className="font-semibold text-slate-700">
+                                {location.budget_range}
+                              </span>
+                            </>
+                          )}
+                        </div>
+
+                        {amenities.length > 0 && (
+                          <div className="flex shrink-0 items-center gap-1 text-slate-500">
+                            {amenities.map(({ label, Icon }) => (
+                              <span
+                                key={label}
+                                title={label}
+                                className="rounded-md bg-slate-100 p-1 text-slate-600 hover:bg-gold/30 hover:text-dark-burgundy transition-colors"
+                              >
+                                <Icon className="h-3 w-3" />
+                              </span>
+                            ))}
+                          </div>
+                        )}
+                      </div>
                     </button>
                   </li>
                 );

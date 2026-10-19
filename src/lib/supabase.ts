@@ -131,10 +131,8 @@ export async function withSignedSpotImages<T extends Pick<Spot, 'image_path' | '
     }
 
     const signedUrl = signedUrls.get(spot.image_path);
-    if (!signedUrl) {
-      throw new Error(`Unable to create a signed URL for spot image "${spot.image_path}".`);
-    }
-    return { ...spot, image_url: signedUrl };
+    // Graceful fallback: If image isn't found in bucket, don't crash!
+    return { ...spot, image_url: signedUrl ?? null };
   });
 }
 
