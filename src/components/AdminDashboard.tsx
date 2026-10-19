@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { supabase, Spot, uploadSpotImage, withSignedSpotImages } from '../lib/supabase';
+import { supabase, Spot, uploadSpotImage, withSpotImageUrls } from '../lib/supabase';
 import { SignedSpotImage } from './SignedSpotImage';
 import { validateSpotSubmission } from '../lib/spotValidation';
 import { CheckCircle2, Trash2, Plus, Clock, MapPin, X, AlertTriangle, ArrowLeft, Pencil, ShieldCheck, History, ImagePlus, Filter } from 'lucide-react';
@@ -117,6 +117,7 @@ export function AdminDashboard({ isOpen, onClose, onSpotsUpdated }: AdminDashboa
   const [editSpotImage, setEditSpotImage] = useState<File | null>(null);
   const editSpotImageInputRef = useRef<HTMLInputElement>(null);
   const [editSpotImagePreview, setEditSpotImagePreview] = useState<string | null>(null);
+  const [newSpotImagePreview, setNewSpotImagePreview] = useState<string | null>(null);
   const [spotToDelete, setSpotToDelete] = useState<{ id: string; name: string; isPending?: boolean } | null>(null);
   const [resolvingReportId, setResolvingReportId] = useState<string | null>(null);
 
@@ -133,6 +134,17 @@ export function AdminDashboard({ isOpen, onClose, onSpotsUpdated }: AdminDashboa
     setEditSpotImagePreview(previewUrl);
     return () => URL.revokeObjectURL(previewUrl);
   }, [editSpotImage]);
+
+  useEffect(() => {
+    if (!newSpotImage) {
+      setNewSpotImagePreview(null);
+      return;
+    }
+
+    const previewUrl = URL.createObjectURL(newSpotImage);
+    setNewSpotImagePreview(previewUrl);
+    return () => URL.revokeObjectURL(previewUrl);
+  }, [newSpotImage]);
 
   useEffect(() => {
     if (!isOpen || activeTab !== 'approved') return;
@@ -159,7 +171,7 @@ export function AdminDashboard({ isOpen, onClose, onSpotsUpdated }: AdminDashboa
         .eq('approved', false)
         .order('created_at', { ascending: false });
       if (pendingError) throw pendingError;
-      const pendingWithImages = await withSignedSpotImages((pending as Spot[] | null) ?? []);
+      const pendingWithImages = await withSpotImageUrls((pending as Spot[] | null) ?? []);
 
       // 2. Fetch approved spots
       const { data: approved, error: approvedError } = await supabase
@@ -168,7 +180,7 @@ export function AdminDashboard({ isOpen, onClose, onSpotsUpdated }: AdminDashboa
         .eq('approved', true)
         .order('name', { ascending: true });
       if (approvedError) throw approvedError;
-      const approvedWithImages = await withSignedSpotImages((approved as Spot[] | null) ?? []);
+      const approvedWithImages = await withSpotImageUrls((approved as Spot[] | null) ?? []);
 
       setPendingSpots(pendingWithImages);
       setApprovedSpots(approvedWithImages);
@@ -312,7 +324,11 @@ export function AdminDashboard({ isOpen, onClose, onSpotsUpdated }: AdminDashboa
       }
     } catch (error) {
       setIsSavingEdit(false);
-      setActionMessage(error instanceof Error ? error.message : 'Unable to upload image.');
+      setActionMessage(
+        error instanceof Error
+          ? error.message
+          : 'Image validation or upload failed. Check that the image is a valid JPEG, PNG, or WebP no larger than 5 MB, then try again.',
+      );
       return;
     }
 
@@ -344,20 +360,26 @@ export function AdminDashboard({ isOpen, onClose, onSpotsUpdated }: AdminDashboa
       })
       .eq('id', editingSpot.id)
       .eq('approved', editingSpot.approved)
-      .select('id')
+      .select('id, image_path')
       .maybeSingle();
     setIsSavingEdit(false);
 
     if (error) {
-      setActionMessage(`Unable to save changes: ${error.message}`);
+      setActionMessage(
+        `Unable to save spot changes: ${error.message}${editSpotImage ? ' The new image uploaded but was not linked; the existing spot image remains unchanged.' : ''}`,
+      );
       return;
     }
     if (!data) {
-      setActionMessage('This submission is no longer pending. Refresh the dashboard and try again.');
-      setEditingSpot(null);
-      setEditFormData(null);
-      setEditSpotImage(null);
-      await loadSpots();
+      setActionMessage(
+        `Unable to save spot changes: no matching spot row was updated.${editSpotImage ? ' The new image uploaded but was not linked; the existing spot image remains unchanged.' : ''}`,
+      );
+      return;
+    }
+    if (data.image_path !== imagePath) {
+      setActionMessage(
+        `Spot changes were returned without the expected image path. Verify that the spots.image_path column is available before retrying.${editSpotImage ? ' The new image was uploaded but could not be confirmed as linked.' : ''}`,
+      );
       return;
     }
 
@@ -369,6 +391,7 @@ export function AdminDashboard({ isOpen, onClose, onSpotsUpdated }: AdminDashboa
     if (Boolean(editingSpot.has_wifi) !== editFormData.has_wifi) changes.push(editFormData.has_wifi ? '+Wi-Fi' : '-Wi-Fi');
     if (Boolean(editingSpot.has_outlets) !== editFormData.has_outlets) changes.push(editFormData.has_outlets ? '+Outlets' : '-Outlets');
     if (Boolean(editingSpot.has_aircon) !== editFormData.has_aircon) changes.push(editFormData.has_aircon ? '+Aircon' : '-Aircon');
+    if (editSpotImage) changes.push('Added/replaced spot photo');
 
     let summary = changes.length > 0 ? changes.join(' · ') : 'Updated details';
     if (resolvingReportId) summary = `[Resolved Student Report] ${summary}`;
@@ -462,14 +485,25 @@ export function AdminDashboard({ isOpen, onClose, onSpotsUpdated }: AdminDashboa
 
     try {
       const imagePath = newSpotImage ? await uploadSpotImage(newSpotImage) : null;
-      const { error } = await supabase.from('spots').insert([
+      const { data, error } = await supabase.from('spots').insert([
         {
           ...formData,
+          is_active: true,
           image_path: imagePath,
+          image_url: null,
           approved: true,
         },
-      ]);
-      if (error) throw error;
+      ]).select('id, image_path').single();
+      if (error) {
+        throw new Error(
+          `Unable to save the new spot: ${error.message}${imagePath ? ' The image uploaded but was not linked to a spot.' : ''}`,
+        );
+      }
+      if (!data || data.image_path !== imagePath) {
+        throw new Error(
+          `The new spot was not confirmed with the expected image path. Verify that the spots.image_path column is available.${imagePath ? ' The image uploaded but could not be confirmed as linked.' : ''}`,
+        );
+      }
 
       setActionMessage('New spot added directly to map!');
       setFormData(createDefaultSpotFormData());
@@ -1030,9 +1064,16 @@ export function AdminDashboard({ isOpen, onClose, onSpotsUpdated }: AdminDashboa
                 type="file"
                 accept="image/jpeg,image/png,image/webp"
                 onChange={(event) => setNewSpotImage(event.target.files?.[0] ?? null)}
-                className="mt-1 w-full rounded-xl border border-slate-200 p-2.5 text-xs"
+                className="mt-1 w-full rounded-xl border border-slate-200 p-2.5 text-xs file:mr-3 file:rounded-lg file:border-0 file:bg-gold/15 file:px-3 file:py-2 file:text-xs file:font-semibold file:text-dark-burgundy"
               />
               <p className="mt-1 text-[11px] text-slate-500">JPEG, PNG, or WebP, up to 5 MB.</p>
+              {newSpotImage && newSpotImagePreview && (
+                <img
+                  src={newSpotImagePreview}
+                  alt={`Selected photo for ${formData.name || 'new spot'}`}
+                  className="mt-2 h-36 w-full rounded-xl object-cover"
+                />
+              )}
               {newSpotImage && <p className="mt-1 truncate text-[11px] text-slate-600">{newSpotImage.name}</p>}
             </div>
 
@@ -1566,7 +1607,7 @@ export function AdminDashboard({ isOpen, onClose, onSpotsUpdated }: AdminDashboa
                     alt={`Selected photo for ${editingSpot.name}`}
                     className="mt-2 h-32 w-full rounded-xl object-cover"
                   />
-                ) : editingSpot.image_url ? (
+                ) : editingSpot.image_url || editingSpot.image_path ? (
                   <SignedSpotImage
                     imagePath={editingSpot.image_path}
                     imageUrl={editingSpot.image_url}

@@ -49,10 +49,17 @@ export interface Spot {
 }
 
 const SPOT_IMAGE_BUCKET = 'spot-images';
-const SIGNED_IMAGE_URL_TTL_SECONDS = 15 * 60;
 
 function isSpotImagePath(path: string): boolean {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.(jpg|png|webp)$/i.test(path);
+}
+
+export function createPublicSpotImageUrl(path: string): string {
+  if (!isSpotImagePath(path)) {
+    throw new Error('Invalid spot image path.');
+  }
+
+  return supabase.storage.from(SPOT_IMAGE_BUCKET).getPublicUrl(path).data.publicUrl;
 }
 
 export async function uploadSpotImage(file: File): Promise<string> {
@@ -85,54 +92,15 @@ export async function uploadSpotImage(file: File): Promise<string> {
   return path;
 }
 
-export async function createSignedSpotImageUrl(path: string): Promise<string> {
-  if (!isSpotImagePath(path)) {
-    throw new Error('Invalid spot image path.');
-  }
-
-  const { data, error } = await supabase.storage
-    .from(SPOT_IMAGE_BUCKET)
-    .createSignedUrl(path, SIGNED_IMAGE_URL_TTL_SECONDS);
-  if (error || !data?.signedUrl) {
-    throw new Error('Unable to refresh the spot image.');
-  }
-  return data.signedUrl;
-}
-
-export async function withSignedSpotImages<T extends Pick<Spot, 'image_path' | 'image_url'>>(
+export async function withSpotImageUrls<T extends Pick<Spot, 'image_path' | 'image_url'>>(
   spots: T[],
 ): Promise<Array<T & { image_url: string | null }>> {
-  const paths = [...new Set(spots.map((spot) => spot.image_path).filter((path): path is string => Boolean(path)))];
-  if (paths.some((path) => !isSpotImagePath(path))) {
-    throw new Error('A spot contains an invalid image path.');
-  }
-  if (paths.length === 0) {
-    return spots.map((spot) => ({ ...spot, image_url: spot.image_url ?? null }));
-  }
-
-  const { data, error } = await supabase.storage
-    .from(SPOT_IMAGE_BUCKET)
-    .createSignedUrls(paths, SIGNED_IMAGE_URL_TTL_SECONDS);
-
-  if (error || !data) {
-    throw new Error(`Unable to load spot images: ${error?.message ?? 'No signed URL data returned.'}`);
-  }
-
-  const signedUrls = new Map<string, string>();
-  for (const item of data ?? []) {
-    if (item.path && item.signedUrl) {
-      signedUrls.set(item.path, item.signedUrl);
-    }
-  }
-
   return spots.map((spot) => {
     if (!spot.image_path) {
       return { ...spot, image_url: spot.image_url ?? null };
     }
 
-    const signedUrl = signedUrls.get(spot.image_path);
-    // Graceful fallback: If image isn't found in bucket, don't crash!
-    return { ...spot, image_url: signedUrl ?? null };
+    return { ...spot, image_url: createPublicSpotImageUrl(spot.image_path) };
   });
 }
 
@@ -146,7 +114,7 @@ export async function getApprovedSpots() {
   if (error) {
     throw new Error(`Unable to fetch spots: ${error.message}`);
   }
-  return withSignedSpotImages((data as Spot[] | null) ?? []);
+  return withSpotImageUrls((data as Spot[] | null) ?? []);
 }
 
 // 2. Allow any visitor to contribute a spot (pending admin approval)
