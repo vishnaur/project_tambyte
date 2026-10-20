@@ -8,7 +8,7 @@ import { Footer } from '../components/Footer';
 import { AdminLoginModal } from '../components/AdminLoginModal';
 import { X, AlertCircle } from 'lucide-react';
 import { BULSU_MENESES_CAMPUS } from '../constants/locations';
-import { supabase, withSignedSpotImages } from '../lib/supabase';
+import { supabase, withSpotImageUrls } from '../lib/supabase';
 import type { SpotRow } from '../types/database';
 import { calculateDistanceKm, getOpeningStatus, getWalkingRoute, type WalkingRoute } from '../utils/location';
 import { AdminDashboard } from '../components/AdminDashboard';
@@ -169,7 +169,7 @@ export default function HomePage() {
         }
 
         if (data) {
-          const spotsWithImages = await withSignedSpotImages(data as unknown as SpotRow[]);
+          const spotsWithImages = await withSpotImageUrls(data as unknown as SpotRow[]);
           if (isCurrentRequest) {
             setLocations(spotsWithImages);
           }
@@ -192,6 +192,15 @@ export default function HomePage() {
       isCurrentRequest = false;
     };
   }, [reloadLocations]);
+
+  useEffect(() => {
+    if (!selectedSpot) return;
+
+    const refreshedSpot = locations.find((location) => location.id === selectedSpot.id);
+    if (refreshedSpot && refreshedSpot !== selectedSpot) {
+      setSelectedSpot(refreshedSpot);
+    }
+  }, [locations, selectedSpot]);
 
   const categories = useMemo(
     () =>

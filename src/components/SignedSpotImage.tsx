@@ -1,12 +1,12 @@
 import { useEffect, useRef, useState } from 'react';
-import { createSignedSpotImageUrl } from '../lib/supabase';
+import { createPublicSpotImageUrl } from '../lib/supabase';
 
 interface SignedSpotImageProps {
   imagePath?: string | null;
   imageUrl?: string | null;
   alt: string;
   className: string;
-  onUnavailable?: () => void;
+  onUnavailable?: (message: string) => void;
 }
 
 export function SignedSpotImage({
@@ -17,11 +17,25 @@ export function SignedSpotImage({
   onUnavailable,
 }: SignedSpotImageProps) {
   const [src, setSrc] = useState(imageUrl ?? null);
-  const retriedRef = useRef(false);
+  const onUnavailableRef = useRef(onUnavailable);
+
+  useEffect(() => {
+    onUnavailableRef.current = onUnavailable;
+  }, [onUnavailable]);
 
   useEffect(() => {
     setSrc(imageUrl ?? null);
-    retriedRef.current = false;
+
+    if (!imagePath) return;
+
+    try {
+      setSrc(createPublicSpotImageUrl(imagePath));
+    } catch (error) {
+      setSrc(null);
+      onUnavailableRef.current?.(
+        error instanceof Error ? error.message : 'Invalid public image path.',
+      );
+    }
   }, [imagePath, imageUrl]);
 
   if (!src) return null;
@@ -32,19 +46,10 @@ export function SignedSpotImage({
       alt={alt}
       className={className}
       onError={() => {
-        if (!imagePath || retriedRef.current) {
-          setSrc(null);
-          onUnavailable?.();
-          return;
-        }
-
-        retriedRef.current = true;
-        void createSignedSpotImageUrl(imagePath)
-          .then(setSrc)
-          .catch(() => {
-            setSrc(null);
-            onUnavailable?.();
-          });
+        setSrc(null);
+        onUnavailableRef.current?.(
+          `The public image URL could not be loaded for ${imagePath ?? 'the supplied image URL'}.`,
+        );
       }}
     />
   );
