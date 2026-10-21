@@ -1,6 +1,7 @@
-import { useCallback, useState } from 'react';
-import HomePage from './pages/HomePage';
+import { lazy, Suspense, useCallback, useState } from 'react';
 import { IntroSplash } from './components/IntroSplash';
+
+const HomePage = lazy(() => import('./pages/HomePage'));
 
 export default function App() {
   const [isIntroVisible, setIsIntroVisible] = useState(() => {
@@ -10,6 +11,13 @@ export default function App() {
       return true;
     }
   });
+  const [isIntroFinished, setIsIntroFinished] = useState(() => {
+    try {
+      return window.sessionStorage.getItem('tambyte-intro-seen') === 'true';
+    } catch {
+      return false;
+    }
+  });
 
   const handleIntroFinish = useCallback(() => {
     try {
@@ -17,13 +25,22 @@ export default function App() {
     } catch {
       // The splash still completes when session storage is unavailable.
     }
+    setIsIntroFinished(true);
     setIsIntroVisible(false);
   }, []);
 
   return (
     <>
       <IntroSplash isVisible={isIntroVisible} onFinish={handleIntroFinish} />
-      <HomePage />
+      <Suspense
+        fallback={
+          <main className="flex min-h-screen items-center justify-center bg-warm-cream text-sm font-medium text-dark-burgundy">
+            Loading Tambyte...
+          </main>
+        }
+      >
+        <HomePage isIntroFinished={isIntroFinished} />
+      </Suspense>
     </>
   );
 }

@@ -1,23 +1,73 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { lazy, Suspense, useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
+import { useReducedMotion } from 'motion/react';
 import { Navbar } from '../components/Navbar';
 import { FilterPanel } from '../components/FilterPanel';
-import { MapArea } from '../components/MapArea';
 import { SpotDetailPanel } from '../components/SpotDetailPanel';
 import { Footer } from '../components/Footer';
-import { AdminLoginModal } from '../components/AdminLoginModal';
 import { X, AlertCircle } from 'lucide-react';
 import { BULSU_MENESES_CAMPUS } from '../constants/locations';
 import { supabase, withSpotImageUrls } from '../lib/supabase';
 import type { SpotRow } from '../types/database';
 import { calculateDistanceKm, getOpeningStatus, getWalkingRoute, type WalkingRoute } from '../utils/location';
-import { AdminDashboard } from '../components/AdminDashboard';
-import { ContributeSpotModal } from '../components/ContributeSpotModal';
-import { ReportModal } from '../components/ReportModal';
+import { UserGuide } from '../components/UserGuide';
 
-export default function HomePage() {
+const MapArea = lazy(() =>
+  import('../components/MapArea').then((module) => ({ default: module.MapArea })),
+);
+const AdminLoginModal = lazy(() =>
+  import('../components/AdminLoginModal').then((module) => ({ default: module.AdminLoginModal })),
+);
+const AdminDashboard = lazy(() =>
+  import('../components/AdminDashboard').then((module) => ({ default: module.AdminDashboard })),
+);
+const ContributeSpotModal = lazy(() =>
+  import('../components/ContributeSpotModal').then((module) => ({ default: module.ContributeSpotModal })),
+);
+const ReportModal = lazy(() =>
+  import('../components/ReportModal').then((module) => ({ default: module.ReportModal })),
+);
+
+interface HomePageProps {
+  isIntroFinished: boolean;
+}
+
+const FAVORITES_STORAGE_KEY = 'tambyte-spot-favorites';
+
+function readFavoriteIds(): string[] {
+  try {
+    const storedFavorites = window.localStorage.getItem(FAVORITES_STORAGE_KEY);
+    if (!storedFavorites) return [];
+
+    const parsed: unknown = JSON.parse(storedFavorites);
+    if (!Array.isArray(parsed) || !parsed.every((id) => typeof id === 'string')) {
+      console.warn('Saved spot favorites have an invalid format; starting with an empty list.');
+      return [];
+    }
+
+    return parsed;
+  } catch (error) {
+    console.warn('Unable to read saved spot favorites from this device.', error);
+    return [];
+  }
+}
+
+export default function HomePage({ isIntroFinished }: HomePageProps) {
+  const prefersReducedMotion = useReducedMotion();
+  const [hasSeenGuide, setHasSeenGuide] = useState(() => {
+    try {
+      return window.localStorage.getItem('tambyte-guide-seen') === 'true';
+    } catch {
+      return false;
+    }
+  });
+  const [isGuideOpen, setIsGuideOpen] = useState(false);
+  const [isWelcomeGuide, setIsWelcomeGuide] = useState(false);
+  const [isMapRevealActive, setIsMapRevealActive] = useState(false);
   const [isMobileFilterOpen, setIsMobileFilterOpen] = useState(false);
   const [isDesktopFilterOpen, setIsDesktopFilterOpen] = useState(true);
+  const [favoriteIds, setFavoriteIds] = useState<string[]>(readFavoriteIds);
+  const [spotListView, setSpotListView] = useState<'spots' | 'favorites'>('spots');
   const [selectedSpot, setSelectedSpot] = useState<SpotRow | null>(null);
   const [isDetailOpen, setIsDetailOpen] = useState(false);
   const [focusRequest, setFocusRequest] = useState(0);
@@ -37,6 +87,54 @@ export default function HomePage() {
   const [isContributeModalOpen, setIsContributeModalOpen] = useState(false);
   const [activeModal, setActiveModal] = useState<'admin' | 'report' | null>(null);
   const [userGps, setUserGps] = useState<{ latitude: number; longitude: number } | null>(null);
+
+  useEffect(() => {
+    function handleStorage(event: StorageEvent) {
+      if (event.key === FAVORITES_STORAGE_KEY) {
+        setFavoriteIds(readFavoriteIds());
+      }
+    }
+
+    window.addEventListener('storage', handleStorage);
+    return () => window.removeEventListener('storage', handleStorage);
+  }, []);
+
+  const handleToggleFavorite = (spotId: string) => {
+    const nextFavoriteIds = favoriteIds.includes(spotId)
+      ? favoriteIds.filter((id) => id !== spotId)
+      : [...favoriteIds, spotId];
+
+    try {
+      window.localStorage.setItem(FAVORITES_STORAGE_KEY, JSON.stringify(nextFavoriteIds));
+    } catch (error) {
+      console.error('Unable to save spot favorites on this device.', error);
+      window.alert('Favorites could not be saved on this device. Check your browser storage settings and try again.');
+      return;
+    }
+
+    setFavoriteIds(nextFavoriteIds);
+  };
+
+  useEffect(() => {
+    if (isIntroFinished && !hasSeenGuide) {
+      setIsWelcomeGuide(true);
+      setIsGuideOpen(true);
+    }
+  }, [hasSeenGuide, isIntroFinished]);
+
+  const handleGuideClose = () => {
+    try {
+      window.localStorage.setItem('tambyte-guide-seen', 'true');
+    } catch {
+      // The guide remains usable when browser storage is unavailable.
+    }
+    setHasSeenGuide(true);
+    setIsGuideOpen(false);
+    if (isWelcomeGuide) {
+      setIsWelcomeGuide(false);
+      setIsMapRevealActive(!prefersReducedMotion);
+    }
+  };
 
   useEffect(() => {
     const intervalId = window.setInterval(() => {
@@ -307,6 +405,10 @@ export default function HomePage() {
       {/* 1. Top Navigation Bar */}
       <Navbar
         isAdmin={isAdmin}
+        onGuideClick={() => {
+          setIsWelcomeGuide(false);
+          setIsGuideOpen(true);
+        }}
         onShareSpotClick={() => setIsContributeModalOpen(true)}
         onAdminLoginClick={() => setActiveModal('admin')}
         onAdminDashboardClick={() => setIsAdminDashboardOpen(true)}
@@ -337,6 +439,10 @@ export default function HomePage() {
             locations={locations}
             selectedSpotId={selectedSpot?.id ?? null}
             onLocateLocation={handleLocateLocation}
+            favoriteIds={favoriteIds}
+            onToggleFavorite={handleToggleFavorite}
+            view={spotListView}
+            onViewChange={setSpotListView}
           />
         </div>
 
@@ -354,26 +460,44 @@ export default function HomePage() {
               locations={locations}
               selectedSpotId={selectedSpot?.id ?? null}
               onLocateLocation={handleLocateLocation}
+              favoriteIds={favoriteIds}
+              onToggleFavorite={handleToggleFavorite}
+              view={spotListView}
+              onViewChange={setSpotListView}
             />
           </div>
         )}
 
-        <MapArea
-          onShareSpotClick={() => setIsContributeModalOpen(true)}
-          onGetDirections={handleGetDirections} // <-- Add this line!
-          locations={filteredLocations}
-          totalLocationCount={locations.length}
-          isLoading={isLoadingLocations}
-          loadError={locationLoadError}
-          onRetry={() => setReloadLocations((attempt) => attempt + 1)}
-          onLocateLocation={handleLocateLocation}
-          onViewDetails={handleViewDetails}
-          selectedSpotId={selectedSpot?.id ?? null}
-          focusRequest={focusRequest}
-          walkingRoute={directionsSpotId === selectedSpot?.id ? walkingRoute : null}
-          isFilterOpen={isDesktopFilterOpen}
-          onToggleFilter={() => setIsDesktopFilterOpen((isOpen) => !isOpen)}
-        />
+        <Suspense
+          fallback={
+            <main
+              className="relative flex min-h-0 flex-1 items-center justify-center bg-slate-100/80 p-3 text-sm font-medium text-dark-burgundy sm:p-5 lg:p-6"
+              aria-label="Loading interactive campus map"
+              role="status"
+            >
+              <span className="rounded-xl border border-gold/50 bg-warm-cream px-4 py-3 shadow-sm">
+                Loading campus map...
+              </span>
+            </main>
+          }
+        >
+          <MapArea
+            onShareSpotClick={() => setIsContributeModalOpen(true)}
+            onGetDirections={handleGetDirections}
+            locations={filteredLocations}
+            totalLocationCount={locations.length}
+            isLoading={isLoadingLocations}
+            loadError={locationLoadError}
+            onRetry={() => setReloadLocations((attempt) => attempt + 1)}
+            onLocateLocation={handleLocateLocation}
+            onViewDetails={handleViewDetails}
+            selectedSpotId={selectedSpot?.id ?? null}
+            focusRequest={focusRequest}
+            walkingRoute={directionsSpotId === selectedSpot?.id ? walkingRoute : null}
+            isFilterOpen={isDesktopFilterOpen}
+            onToggleFilter={() => setIsDesktopFilterOpen((isOpen) => !isOpen)}
+          />
+        </Suspense>
 
         {/* 3. Spot Details Bottom Sheet / Side Panel */}
         <SpotDetailPanel
@@ -398,6 +522,8 @@ export default function HomePage() {
             setSelectedSpot(spot);
             setActiveModal('report');
           }}
+          isFavorite={selectedSpot ? favoriteIds.includes(selectedSpot.id) : false}
+          onToggleFavorite={handleToggleFavorite}
           onClearDirections={() => {
             setDirectionsSpotId(null);
             setWalkingRoute(null);
@@ -410,39 +536,57 @@ export default function HomePage() {
       <Footer onReportIssueClick={() => setActiveModal('report')} />
 
       {/* Real Working Admin Login Modal */}
-      <AdminLoginModal
-        isOpen={activeModal === 'admin'}
-        onClose={() => setActiveModal(null)}
-        onLoginSuccess={() => {
-          setIsAdmin(true);
-          setReloadLocations((prev) => prev + 1);
-        }}
-      />
+      <Suspense fallback={null}>
+        {activeModal === 'admin' && (
+          <AdminLoginModal
+            isOpen
+            onClose={() => setActiveModal(null)}
+            onLoginSuccess={() => {
+              setIsAdmin(true);
+              setReloadLocations((prev) => prev + 1);
+            }}
+          />
+        )}
 
-      {/* Real Working Student Report Modal */}
-      <ReportModal
-        isOpen={activeModal === 'report'}
-        onClose={() => setActiveModal(null)}
-        spots={locations}
-        preselectedSpot={selectedSpot}
-      />
+        {activeModal === 'report' && (
+          <ReportModal
+            isOpen
+            onClose={() => setActiveModal(null)}
+            spots={locations}
+            preselectedSpot={selectedSpot}
+          />
+        )}
 
-      {/* Student Spot Contribution Modal */}
-      <ContributeSpotModal
-        isOpen={isContributeModalOpen}
-        onClose={() => setIsContributeModalOpen(false)}
-        onSubmitted={() => {
-          setIsContributeModalOpen(false);
-          setReloadLocations((prev) => prev + 1);
-        }}
-      />
+        {isContributeModalOpen && (
+          <ContributeSpotModal
+            isOpen
+            onClose={() => setIsContributeModalOpen(false)}
+            onSubmitted={() => {
+              setIsContributeModalOpen(false);
+              setReloadLocations((prev) => prev + 1);
+            }}
+          />
+        )}
 
-      <AdminDashboard
-        isOpen={isAdminDashboardOpen}
-        onClose={() => setIsAdminDashboardOpen(false)}
-        onSpotsUpdated={() => setReloadLocations((prev) => prev + 1)}
-      />
+        {isAdminDashboardOpen && (
+          <AdminDashboard
+            isOpen
+            onClose={() => setIsAdminDashboardOpen(false)}
+            onSpotsUpdated={() => setReloadLocations((prev) => prev + 1)}
+          />
+        )}
+      </Suspense>
 
+      <UserGuide isOpen={isGuideOpen} onClose={handleGuideClose} />
+      {(isMapRevealActive || (isGuideOpen && isWelcomeGuide)) && (
+        <div
+          className={`tambyte-map-monochrome-overlay ${
+            isMapRevealActive ? 'tambyte-map-monochrome-overlay--revealing' : ''
+          }`}
+          onAnimationEnd={() => setIsMapRevealActive(false)}
+          aria-hidden="true"
+        />
+      )}
     </div>
   );
 }
