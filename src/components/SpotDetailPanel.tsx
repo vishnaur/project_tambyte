@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { AlertCircle, Clock, Footprints, MapPin, X, Zap } from 'lucide-react';
+import { AlertCircle, Clock, Footprints, Heart, MapPin, X, Zap } from 'lucide-react';
 import { BULSU_MENESES_CAMPUS } from '../constants/locations';
 import type { SpotRow } from '../types/database';
 import { SignedSpotImage } from './SignedSpotImage';
@@ -18,6 +18,8 @@ interface SpotDetailPanelProps {
   onRetryDirections: () => void;
   onClearDirections: () => void;
   onReportIssue: (spot: SpotRow) => void;
+  isFavorite: boolean;
+  onToggleFavorite: (spotId: string) => void;
 }
 
 const OPENING_STATUS_LABELS: Record<OpeningStatus, string> = {
@@ -39,6 +41,8 @@ export function SpotDetailPanel({
   onRetryDirections,
   onClearDirections,
   onReportIssue,
+  isFavorite,
+  onToggleFavorite,
 }: SpotDetailPanelProps) {
   const [, setClockTick] = useState(0);
 
@@ -114,6 +118,18 @@ export function SpotDetailPanel({
             </h2>
           </div>
           <div className="flex shrink-0 items-center gap-1">
+            <button
+              type="button"
+              onClick={() => onToggleFavorite(spot.id)}
+              className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-slate-400/30 bg-slate-400/10 backdrop-blur-[1px] transition-colors hover:bg-rose-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-dark-burgundy ${
+                isFavorite ? 'text-deep-crimson' : 'text-slate-500'
+              }`}
+              aria-label={isFavorite ? `Remove ${spot.name} from favorites` : `Add ${spot.name} to favorites`}
+              aria-pressed={isFavorite}
+              title={isFavorite ? 'Remove from favorites' : 'Add to favorites'}
+            >
+              <Heart className={`h-5 w-5 ${isFavorite ? 'fill-current' : ''}`} aria-hidden="true" />
+            </button>
             <button
               type="button"
               onClick={() => onReportIssue(spot)}

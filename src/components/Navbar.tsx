@@ -1,8 +1,9 @@
 import React from 'react';
-import { User, LogOut, SlidersHorizontal, X, ShieldCheck, } from 'lucide-react';
+import { User, LogOut, SlidersHorizontal, X, ShieldCheck, CircleHelp } from 'lucide-react';
 
 interface NavbarProps {
   isAdmin?: boolean;
+  onGuideClick: () => void;
   onAdminLoginClick: () => void;
   onAdminDashboardClick?: () => void;
   onAdminLogoutClick?: () => void;
@@ -49,6 +50,7 @@ function TambyteLogoMark() {
 
 export function Navbar({
   isAdmin = false,
+  onGuideClick,
   onAdminLoginClick,
   onAdminDashboardClick,
   onAdminLogoutClick,
@@ -120,6 +122,16 @@ export function Navbar({
           )}
         </button>
 
+        <button
+          type="button"
+          onClick={onGuideClick}
+          className="flex h-10 w-10 items-center justify-center gap-1.5 rounded-xl border border-gold/50 bg-warm-cream text-dark-burgundy shadow-sm transition-colors hover:bg-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold focus-visible:ring-offset-2 sm:w-auto sm:px-3"
+          aria-label="How to use Tambyte"
+          title="How to use Tambyte"
+        >
+          <CircleHelp className="h-4 w-4" aria-hidden="true" />
+          <span className="hidden text-xs font-semibold sm:inline">Guide</span>
+        </button>
 
         {/* When Logged In as Admin vs Visitor */}
         {isAdmin ? (

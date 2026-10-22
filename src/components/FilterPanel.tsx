@@ -15,6 +15,7 @@ import {
   TreePine,
   VolumeX,
   Footprints,
+  Heart,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import type { SpotRow } from '../types/database';
@@ -32,6 +33,10 @@ interface FilterPanelProps {
   locations: readonly SpotRow[];
   selectedSpotId: string | null;
   onLocateLocation: (location: SpotRow) => void;
+  favoriteIds: readonly string[];
+  onToggleFavorite: (spotId: string) => void;
+  view: 'spots' | 'favorites';
+  onViewChange: (view: 'spots' | 'favorites') => void;
 }
 
 const MAIN_CATEGORIES: Array<{ label: string; value: string; Icon: LucideIcon }> = [
@@ -84,6 +89,10 @@ export function FilterPanel({
   locations,
   selectedSpotId,
   onLocateLocation,
+  favoriteIds,
+  onToggleFavorite,
+  view,
+  onViewChange,
 }: FilterPanelProps) {
   const extraCategories = categories
     .filter((category) => !MAIN_CATEGORIES.some((option) => option.value === category))
@@ -102,7 +111,9 @@ export function FilterPanel({
     ? locations
     : locations.filter((location) => location.category?.trim() === selectedCategory.trim());
   const visibleLocations = categoryLocations.filter(
-    (location) => !openNowFilter || getOpeningStatus(location.hours) === 'open',
+    (location) =>
+      (view !== 'favorites' || favoriteIds.includes(location.id)) &&
+      (!openNowFilter || getOpeningStatus(location.hours) === 'open'),
   );
   const hasSelectedCategory = selectedCategory !== '__all__';
 
@@ -186,12 +197,49 @@ export function FilterPanel({
         className="mt-5 flex min-h-0 flex-1 flex-col"
         aria-labelledby={`${id}-spots-heading`}
       >
+        <div className="mb-3 grid grid-cols-2 gap-1 rounded-xl bg-gold/15 p-1">
+          <button
+            type="button"
+            onClick={() => onViewChange('spots')}
+            aria-pressed={view === 'spots'}
+            className={`min-h-9 rounded-lg px-2 text-xs font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-dark-burgundy ${
+              view === 'spots'
+                ? 'bg-white text-dark-burgundy shadow-sm'
+                : 'text-slate-600 hover:bg-white/60'
+            }`}
+          >
+            All spots
+          </button>
+          <button
+            type="button"
+            onClick={() => onViewChange('favorites')}
+            aria-pressed={view === 'favorites'}
+            className={`inline-flex min-h-9 items-center justify-center gap-1.5 rounded-lg px-2 text-xs font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-dark-burgundy ${
+              view === 'favorites'
+                ? 'bg-white text-deep-crimson shadow-sm'
+                : 'text-slate-600 hover:bg-white/60'
+            }`}
+          >
+            <Heart className="h-3.5 w-3.5" aria-hidden="true" />
+            Favorites
+            <span className="rounded-full bg-gold/30 px-1.5 py-0.5 text-[10px] text-deep-maroon">
+              {favoriteIds.length}
+            </span>
+          </button>
+        </div>
+
         <div className="mb-2 flex shrink-0 items-center justify-between gap-2">
           <h3
             id={`${id}-spots-heading`}
             className="text-xs font-semibold uppercase tracking-wider text-dark-burgundy"
           >
-            {openNowFilter ? 'Open now spots' : hasSelectedCategory ? `${selectedCategory} spots` : 'Available spots'}
+            {view === 'favorites'
+              ? 'Your favorites'
+              : openNowFilter
+                ? 'Open now spots'
+                : hasSelectedCategory
+                  ? `${selectedCategory} spots`
+                  : 'Available spots'}
           </h3>
           <span className="rounded-full bg-gold/30 px-2 py-0.5 text-[11px] font-semibold text-deep-maroon">
             {visibleLocations.length}
@@ -210,10 +258,11 @@ export function FilterPanel({
                   location.longitude >= -180 &&
                   location.longitude <= 180;
                 const isSelected = selectedSpotId === location.id;
+                const isFavorite = favoriteIds.includes(location.id);
                 const amenities = getSpotAmenities(location);
 
                 return (
-                  <li key={location.id}>
+                  <li key={location.id} className="relative">
                     <button
                       type="button"
                       onClick={() => onLocateLocation(location)}
@@ -225,7 +274,7 @@ export function FilterPanel({
                           : 'border-slate-200 bg-white/80 hover:border-gold hover:bg-gold/10'
                       }`}
                     >
-                      <span className="flex items-start justify-between gap-2">
+                      <span className="flex items-start justify-between gap-2 pr-8">
                         <span className="text-sm font-semibold text-deep-maroon">{location.name}</span>
                         {getOpeningStatus(location.hours) === 'open' && (
                           <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-emerald-50 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-700">
@@ -282,6 +331,20 @@ export function FilterPanel({
                         )}
                       </div>
                     </button>
+                    <button
+                      type="button"
+                      onClick={() => onToggleFavorite(location.id)}
+                      aria-label={isFavorite ? `Remove ${location.name} from favorites` : `Add ${location.name} to favorites`}
+                      aria-pressed={isFavorite}
+                      title={isFavorite ? 'Remove from favorites' : 'Add to favorites'}
+                      className={`absolute right-2 top-2 z-10 flex h-8 w-8 items-center justify-center rounded-lg transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-dark-burgundy ${
+                        isFavorite
+                          ? 'text-deep-crimson hover:bg-rose-100'
+                          : 'text-slate-400 hover:bg-gold/20 hover:text-deep-crimson'
+                      }`}
+                    >
+                      <Heart className={`h-4 w-4 ${isFavorite ? 'fill-current' : ''}`} aria-hidden="true" />
+                    </button>
                   </li>
                 );
               })}
@@ -289,11 +352,15 @@ export function FilterPanel({
           </div>
         ) : (
           <p className="rounded-xl border border-dashed border-slate-300 bg-white/60 p-3 text-xs text-slate-600">
-            {openNowFilter
-              ? 'No currently open spots match this category.'
-              : hasSelectedCategory
-                ? 'No spots found in this category.'
-                : 'No spots are currently available.'}
+            {view === 'favorites'
+              ? favoriteIds.length
+                ? 'No saved favorites match the current filters.'
+                : 'Tap the heart on any spot to save it here on this device.'
+              : openNowFilter
+                ? 'No currently open spots match this category.'
+                : hasSelectedCategory
+                  ? 'No spots found in this category.'
+                  : 'No spots are currently available.'}
           </p>
         )}
       </section>

@@ -122,6 +122,46 @@
   top: 46px;
 }
 
+@property --map-reveal-radius {
+  syntax: '<length>';
+  inherits: false;
+  initial-value: 0px;
+}
+
+.tambyte-map-monochrome-overlay {
+  position: fixed;
+  z-index: 1100;
+  inset: 0;
+  pointer-events: none;
+  --map-reveal-radius: 0vmax;
+  background-color: #808080;
+  mix-blend-mode: saturation;
+  -webkit-mask-image: radial-gradient(
+    circle at center,
+    transparent 0,
+    transparent var(--map-reveal-radius),
+    rgb(0 0 0 / 25%) calc(var(--map-reveal-radius) + 32px),
+    #000 calc(var(--map-reveal-radius) + 88px)
+  );
+  mask-image: radial-gradient(
+    circle at center,
+    transparent 0,
+    transparent var(--map-reveal-radius),
+    rgb(0 0 0 / 25%) calc(var(--map-reveal-radius) + 32px),
+    #000 calc(var(--map-reveal-radius) + 88px)
+  );
+}
+
+.tambyte-map-monochrome-overlay--revealing {
+  animation: tambyte-map-color-reveal 2.8s cubic-bezier(0.45, 0, 0.35, 1) forwards;
+}
+
+@keyframes tambyte-map-color-reveal {
+  to {
+    --map-reveal-radius: 150vmax;
+  }
+}
+
 
 /* Warm cream theme for the admin dashboard */
 .admin-dashboard {
