@@ -4,6 +4,7 @@ import { validateSpotSubmission } from '../lib/spotValidation';
 import { MapPin, Navigation, X, CheckCircle, Map as MapIcon, ImagePlus } from 'lucide-react';
 import { MapContainer, TileLayer, Marker, useMapEvents } from 'react-leaflet';
 import { BULSU_MENESES_CAMPUS } from '../constants/locations';
+import { spotPickerIcon } from '../utils/spotPickerIcon';
 
 function LocationPicker({ coords, onPick }: { coords: [number, number]; onPick: (lat: number, lng: number) => void }) {
   useMapEvents({
@@ -11,7 +12,7 @@ function LocationPicker({ coords, onPick }: { coords: [number, number]; onPick: 
       onPick(e.latlng.lat, e.latlng.lng);
     },
   });
-  return <Marker position={coords} />;
+  return <Marker position={coords} icon={spotPickerIcon} />;
 }
 
 interface ContributeSpotModalProps {

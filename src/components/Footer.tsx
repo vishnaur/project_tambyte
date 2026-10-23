@@ -12,7 +12,7 @@ export function Footer({ onReportIssueClick }: FooterProps) {
         <div className="flex items-center gap-2">
           <span className="font-semibold tracking-wide text-warm-cream">Tambyte</span>
           <span className="text-gold" aria-hidden="true">·</span>
-          <span>Campus Study &amp; Tambyte Map Foundation (Phase 2)</span>
+          <span>Campus Study &amp; Tambyte Map Foundation (Phase 3)</span>
         </div>
 
         <div className="flex items-center gap-4">

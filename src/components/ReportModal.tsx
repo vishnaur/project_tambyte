@@ -4,6 +4,7 @@ import { AlertCircle, X, CheckCircle, MapPin } from 'lucide-react';
 import type { SpotRow } from '../types/database';
 import { MapContainer, TileLayer, Marker, useMapEvents } from 'react-leaflet';
 import { BULSU_MENESES_CAMPUS } from '../constants/locations';
+import { spotPickerIcon } from '../utils/spotPickerIcon';
 
 interface ReportModalProps {
   isOpen: boolean;
@@ -26,7 +27,7 @@ function ReportMapPicker({ coords, onPick }: { coords: [number, number]; onPick:
       onPick(e.latlng.lat, e.latlng.lng);
     },
   });
-  return <Marker position={coords} />;
+  return <Marker position={coords} icon={spotPickerIcon} />;
 }
 
 export function ReportModal({ isOpen, onClose, spots, preselectedSpot }: ReportModalProps) {

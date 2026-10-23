@@ -6,6 +6,7 @@ import { CheckCircle2, Trash2, Plus, Clock, MapPin, X, AlertTriangle, ArrowLeft,
 import { MapContainer, TileLayer, Marker, useMapEvents } from 'react-leaflet';
 import { BULSU_MENESES_CAMPUS } from '../constants/locations';
 import { getOpeningStatus } from '../utils/location';
+import { spotPickerIcon } from '../utils/spotPickerIcon';
 
 const SPOT_CATEGORIES: Spot['category'][] = [
   'Food',
@@ -87,7 +88,7 @@ function MapPicker({ coords, onPick }: { coords: [number, number]; onPick: (lat:
       onPick(e.latlng.lat, e.latlng.lng);
     },
   });
-  return <Marker position={coords} />;
+  return <Marker position={coords} icon={spotPickerIcon} />;
 }
 
 interface AdminDashboardProps {
